@@ -7,6 +7,40 @@
     },
     "location": {
       "value": "${AZURE_LOCATION}"
+    },
+    "virtualNetworkAddressSpace": {
+      "value": ["10.255.0.0/16"]
+    },
+    "gatewaySubnetName": {
+      "value": "GatewaySubnet"
+    },
+    "gatewaySubnetAddressPrefix": {
+      "value": "10.255.0.0/24"
+    },
+    "dnsPrivateResolverInboundSubnetName": {
+      "value": "dns-private-resolver-inbound"
+    },
+    "dnsPrivateResolverInboundSubnetAddressPrefix": {
+      "value": "10.255.1.0/28"
+    },
+    "dnsPrivateResolverOutboundSubnetName": {
+      "value": "dns-private-resolver-outbound"
+    },
+    "dnsPrivateResolverOutboundSubnetAddressPrefix": {
+      "value": "10.255.1.16/28"
+    },
+    "clientAddressPoolAddressPrefixes": {
+      "value": [
+        "192.168.2.0/24"
+      ]
+    },
+    "vpnGatewayServicePrincipalClientId": {
+      "value": "41b23e61-6c1e-4545-b367-cd054e0ed4b4"
+    },
+    "customRoutesAddressPrefixes": {
+      "value": [
+        "10.0.0.0/8"
+      ]
     }
   }
 }
