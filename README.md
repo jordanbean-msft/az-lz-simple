@@ -13,4 +13,25 @@
 
 ## Deployment
 
+### Update DNS resolution through Azure VPN client
+
+1. Download VPN client zip file
+
+1. Open xml file
+
+1. Get inbound IP address of private dns resolver
+
+1. Add DNS inbound IP address
+
+```xml
+<AzVpnProfile xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/">
+  ...
+  <clientconfig>
+	<dnsservers>
+    <dnsserver>10.255.1.4</dnsserver>
+  </dnsservers>
+  </clientconfig>
+  ...
+```
+
 ## Links
