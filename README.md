@@ -72,4 +72,23 @@ az network vnet peering create -g <central-resource-group-name> -n <virtual-netw
 az network vnet update -g <resource-group-name> --name <virtual-network-name> --dns-servers <dns-resolver-inbound-ip-address>
 ```
 
+## Test DNS resolution
+
+1. You can test the DNS resolution using PowerShell.
+
+```shell
+Resolve-DnsName wa-test-djazhzhdgzb4d0dn.eastus2-01.azurewebsites.net
+
+Name                           Type   TTL   Section    NameHost
+----                           ----   ---   -------    --------
+wa-test-djazhzhdgzb4d0dn.eastu CNAME  60    Answer     wa-test-djazhzhdgzb4d0dn.eastus2-01.privatelink.azurewebsites.ne
+s2-01.azurewebsites.net                                t
+
+Name       : wa-test-djazhzhdgzb4d0dn.eastus2-01.privatelink.azurewebsites.net
+QueryType  : A
+TTL        : 10
+Section    : Answer
+IP4Address : 10.0.0.5
+```
+
 ## Links
