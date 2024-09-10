@@ -214,7 +214,7 @@
             "resource": "Azure Container Registry",
             "privateLinkResourceType": "Microsoft.ContainerRegistry/registries",
             "subresource": "registry",
-            "privateDnsZoneName": ["privatelink.azurecr.io"]
+            "privateDnsZoneName": ["privatelink.azurecr.io", "eastus2.data.privatelink.azurecr.io"]
         },
         {
             "resource": "Azure App Configuration",
@@ -328,7 +328,7 @@
             "resource": "Azure Cache for Redis",
             "privateLinkResourceType": "Microsoft.Cache/RedisEnterprise",
             "subresource": "redisEnterprise",
-            "privateDnsZoneName": ["privatelink.redis.cache.windows.net"]
+            "privateDnsZoneName": ["privatelink.redisenterprise.cache.windows.net"]
         },
         {
             "resource": "Microsoft Purview",
@@ -424,7 +424,7 @@
             "resource": "Azure Data Explorer",
             "privateLinkResourceType": "Microsoft.Kusto/Clusters",
             "subresource": "cluster",
-            "privateDnsZoneName": ["privatelink.westeurope.kusto.windows.net", "privatelink.blob.core.windows.net", "privatelink.table.core.windows.net", "privatelink.queue.core.windows.net"]
+            "privateDnsZoneName": ["privatelink.eastus2.kusto.windows.net", "privatelink.blob.core.windows.net", "privatelink.table.core.windows.net", "privatelink.queue.core.windows.net"]
         },
         {
             "resource": "Azure Databricks",
@@ -437,6 +437,12 @@
             "privateLinkResourceType": "Microsoft.Databricks/workspaces",
             "subresource": "browser_authentication",
             "privateDnsZoneName": ["privatelink.azuredatabricks.net"]
+        },
+        {
+            "resource": "Azure Kubernetes Service",
+            "privateLinkResourceType": "Microsoft.ContainerService/managedClusters",
+            "subresource": "management",
+            "privateDnsZoneName": ["privatelink.eastus2.azmk8s.io"]
         }
     ]
 }

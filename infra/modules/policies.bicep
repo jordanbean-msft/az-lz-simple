@@ -4,8 +4,7 @@ param resourceGroupName string
 param userAssignedIdentityName string
 param location string
 param virtualNetworkName string
-
-var privateZonesMappingData = loadJsonContent('./private-zones.json')
+param privateZonesMappingData object
 
 var privateDnsZoneNames = union(flatten(map(privateZonesMappingData.privateZonesMapping, privateDnsZone => privateDnsZone.privateDnsZoneName)), [])
 
@@ -25,6 +24,9 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 
 resource privateDnsZoneGroupPolicyAssignment 'Microsoft.Authorization/policyAssignments@2024-04-01' = [for privateDnsZonePolicy in privateZonesMappingData.privateZonesMapping: {
   name: '${replace(toLower(privateDnsZonePolicy.resource), ' ', '-')}-${toLower(privateDnsZonePolicy.subresource)}'
+  dependsOn: [
+    privateDnsZones
+  ]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
@@ -53,6 +55,9 @@ var deployPolicy = loadJsonContent('./deploy-policy.json')
 
 resource policyDefinition 'Microsoft.Authorization/policyDefinitions@2023-04-01' = {
   name: 'private-dns-zone-policy-definition'
+  dependsOn: [
+    privateDnsZones
+  ]
   properties: {
     policyType: 'Custom'
     mode: 'Indexed'

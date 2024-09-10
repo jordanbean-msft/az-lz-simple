@@ -21,12 +21,15 @@ param dnsPrivateResolverOutboundSubnetAddressPrefix string
 param clientAddressPoolAddressPrefixes array
 param vpnGatewayServicePrincipalClientId string
 param customRoutesAddressPrefixes array
+@allowed(['commercial', 'government'])
+param privateZonesMappingDataFileType string
 
 @description('Id of the user or app to assign application roles')
 
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
+var privateZonesMappingData = (privateZonesMappingDataFileType == 'commercial') ? loadJsonContent('./commercial.private-zones.json') : loadJsonContent('./government.private-zones.json')
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: !empty(resourceGroupName) ? resourceGroupName : '${abbrs.resourcesResourceGroups}central-${location}-${resourceToken}'
@@ -118,6 +121,7 @@ module policies './modules/policies.bicep' = {
     userAssignedIdentityName: managedIdentity.outputs.managedIdentityName
     location: location
     virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
+    privateZonesMappingData: privateZonesMappingData
   }
 }
 
