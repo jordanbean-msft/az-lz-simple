@@ -443,6 +443,12 @@
             "privateLinkResourceType": "Microsoft.ContainerService/managedClusters",
             "subresource": "management",
             "privateDnsZoneName": ["privatelink.eastus2.azmk8s.io"]
+        },
+        {
+            "resource": "Azure API Management",
+            "privateLinkResourceType": "",
+            "subresource": "",
+            "privateDnsZoneName": ["azure-api.net"]
         }
     ]
 }

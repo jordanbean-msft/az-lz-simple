@@ -20,4 +20,7 @@ resource virtualNetworkLink 'Microsoft.Network/privateDnsZones/virtualNetworkLin
       id: virtualNetwork.id
     }
   }
+  dependsOn: [
+    privateDnsZones
+  ]
 }]

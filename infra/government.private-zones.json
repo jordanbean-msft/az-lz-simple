@@ -437,6 +437,12 @@
             "privateLinkResourceType": "Microsoft.Databricks/workspaces",
             "subresource": "browser_authentication",
             "privateDnsZoneName": ["privatelink.azuredatabricks.azure.us"]
+        },
+        {
+            "resource": "Azure API Management",
+            "privateLinkResourceType": "",
+            "subresource": "",
+            "privateDnsZoneName": ["azure-api.net"]
         }
     ]
 }
