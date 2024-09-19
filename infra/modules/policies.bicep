@@ -22,7 +22,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   scope: resourceGroup(resourceGroupName)
 }
 
-resource privateDnsZoneGroupPolicyAssignment 'Microsoft.Authorization/policyAssignments@2024-04-01' = [for privateDnsZonePolicy in privateZonesMappingData.privateZonesMapping: {
+resource privateDnsZoneGroupPolicyAssignment 'Microsoft.Authorization/policyAssignments@2024-04-01' = [for privateDnsZonePolicy in privateZonesMappingData.privateZonesMapping: if(!empty(privateDnsZonePolicy.privateLinkResourceType)) {
   name: '${replace(toLower(privateDnsZonePolicy.resource), ' ', '-')}-${toLower(privateDnsZonePolicy.subresource)}'
   dependsOn: [
     privateDnsZones
