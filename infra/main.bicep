@@ -92,19 +92,19 @@ module roleAssignment './modules/role-assignment.bicep' = {
   }
 }
 
-// module vpnGateway './modules/vpn-gateway.bicep' = {
-//   name: 'vpn-gateway'
-//   scope: resourceGroup
-//   params: {
-//     publicIpName: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
-//     vpnGatewayName: '${abbrs.networkVpnGateways}central-${location}-${resourceToken}'
-//     location: location
-//     gatewaySubnetId: virtualNetwork.outputs.gatewaySubnetId
-//     clientAddressPoolAddressPrefixes: clientAddressPoolAddressPrefixes
-//     vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
-//     customRoutesAddressPrefixes: customRoutesAddressPrefixes
-//   }
-// }
+module vpnGateway './modules/vpn-gateway.bicep' = {
+  name: 'vpn-gateway'
+  scope: resourceGroup
+  params: {
+    publicIpName: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
+    vpnGatewayName: '${abbrs.networkVpnGateways}central-${location}-${resourceToken}'
+    location: location
+    gatewaySubnetId: virtualNetwork.outputs.gatewaySubnetId
+    clientAddressPoolAddressPrefixes: clientAddressPoolAddressPrefixes
+    vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
+    customRoutesAddressPrefixes: customRoutesAddressPrefixes
+  }
+}
 
 module azureMonitorPrivateLinkScope './modules/azure-monitor-private-link-scope.bicep' = {
   name: 'azure-monitor-private-link-scope'

@@ -328,7 +328,7 @@
             "resource": "Azure Cache for Redis",
             "privateLinkResourceType": "Microsoft.Cache/RedisEnterprise",
             "subresource": "redisEnterprise",
-            "privateDnsZoneName": ["privatelink.redisenterprise.cache.windows.net"]
+            "privateDnsZoneName": ["privatelink.redisenterprise.cache.azure.net"]
         },
         {
             "resource": "Microsoft Purview",
