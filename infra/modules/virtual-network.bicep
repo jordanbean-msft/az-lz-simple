@@ -9,6 +9,8 @@ param dnsPrivateResolverInboundSubnetNsgName string
 param dnsPrivateResolverOutboundSubnetName string
 param dnsPrivateResolverOutboundSubnetAddressPrefix string
 param dnsPrivateResolverOutboundSubnetNsgName string
+param privateEndpointSubnetName string
+param privateEndpointSubnetAddressPrefix string
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-11-01' = {
   name: virtualNetworkName
@@ -16,8 +18,8 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-11-01' = {
   properties: {
     addressSpace: {
       addressPrefixes: virtualNetworkAddressSpace
-    }     
-  }   
+    }
+  }
 }
 
 resource gatewaySubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
@@ -25,8 +27,7 @@ resource gatewaySubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = 
   parent: virtualNetwork
   properties: {
     addressPrefix: gatewaySubnetAddressPrefix
-    delegations:[
-    ]
+    delegations: []
   }
 }
 
@@ -38,7 +39,7 @@ resource dnsPrivateResolverInboundSubnet 'Microsoft.Network/virtualNetworks/subn
     networkSecurityGroup: {
       id: dnsPrivateResolverInboundSubnetNsg.id
     }
-    delegations:[
+    delegations: [
       {
         name: 'Microsoft.Network.dnsResolvers'
         properties: {
@@ -57,7 +58,7 @@ resource dnsPrivateResolverOutboundSubnet 'Microsoft.Network/virtualNetworks/sub
     networkSecurityGroup: {
       id: dnsPrivateResolverOutboundSubnetNsg.id
     }
-    delegations:[
+    delegations: [
       {
         name: 'Microsoft.Network/dnsResolvers'
         properties: {
@@ -138,8 +139,53 @@ resource dnsPrivateResolverOutboundSubnetNsg 'Microsoft.Network/networkSecurityG
   }
 }
 
+resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
+  name: privateEndpointSubnetName
+  parent: virtualNetwork
+  properties: {
+    addressPrefix: privateEndpointSubnetAddressPrefix
+    delegations: []
+  }
+}
+
+resource privateEndpointSubnetNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+  name: '${privateEndpointSubnetName}-nsg'
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowAllInbound'
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'AllowAllOutbound'
+        properties: {
+          priority: 100
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
 output virtualNetworkName string = virtualNetwork.name
 output gatewaySubnetName string = gatewaySubnet.name
 output gatewaySubnetId string = gatewaySubnet.id
 output dnsPrivateResolverInboundSubnetId string = dnsPrivateResolverInboundSubnet.id
 output dnsPrivateResolverOutboundSubnetId string = dnsPrivateResolverOutboundSubnet.id
+output privateEndpointSubnetId string = privateEndpointSubnet.id

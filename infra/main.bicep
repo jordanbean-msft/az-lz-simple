@@ -23,6 +23,8 @@ param vpnGatewayServicePrincipalClientId string
 param customRoutesAddressPrefixes array
 @allowed(['commercial', 'government'])
 param privateZonesMappingDataFileType string
+param privateEndpointSubnetName string
+param privateEndpointSubnetAddressPrefix string
 
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -63,6 +65,8 @@ module virtualNetwork './modules/virtual-network.bicep' = {
     dnsPrivateResolverOutboundSubnetName: dnsPrivateResolverOutboundSubnetName
     dnsPrivateResolverOutboundSubnetAddressPrefix: dnsPrivateResolverOutboundSubnetAddressPrefix
     dnsPrivateResolverOutboundSubnetNsgName: '${abbrs.networkNetworkSecurityGroups}central-outbound-${location}-${resourceToken}'
+    privateEndpointSubnetName: privateEndpointSubnetName
+    privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
   }
 }
 
@@ -126,6 +130,16 @@ module policies './modules/policies.bicep' = {
     location: location
     virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
     privateZonesMappingData: privateZonesMappingData
+  }
+}
+
+module storageAccount './modules/storage-account.bicep' = {
+  name: 'storage-account'
+  scope: resourceGroup
+  params: {
+    storageAccountName: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
+    location: location
+    privateEndpointSubnetId: virtualNetwork.outputs.privateEndpointSubnetId
   }
 }
 

@@ -9,7 +9,9 @@
       "value": "${AZURE_LOCATION}"
     },
     "virtualNetworkAddressSpace": {
-      "value": ["10.255.0.0/16"]
+      "value": [
+        "10.255.0.0/16"
+      ]
     },
     "gatewaySubnetName": {
       "value": "GatewaySubnet"
@@ -41,6 +43,12 @@
       "value": [
         "10.0.0.0/8"
       ]
+    },
+    "privateEndpointSubnetName": {
+      "value": "private-endpoint"
+    },
+    "privateEndpointSubnetAddressPrefix": {
+      "value": "10.255.2.0/28"
     }
   }
 }
