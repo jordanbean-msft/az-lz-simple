@@ -25,6 +25,10 @@ param customRoutesAddressPrefixes array
 param privateZonesMappingDataFileType string
 param privateEndpointSubnetName string
 param privateEndpointSubnetAddressPrefix string
+param timeZone string
+param interval int
+param frequency string
+param scheduleHours array
 
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -140,6 +144,20 @@ module storageAccount './modules/storage-account.bicep' = {
     storageAccountName: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
     location: location
     privateEndpointSubnetId: virtualNetwork.outputs.privateEndpointSubnetId
+  }
+}
+
+module logicApp './modules/logic-app.bicep' = {
+  name: 'logic-app'
+  scope: resourceGroup
+  params: {
+    logicAppName: '${abbrs.logicWorkflows}central-${location}-${resourceToken}'
+    location: location
+    managedIdentityId: managedIdentity.outputs.managedIdentityId
+    timeZone: timeZone
+    interval: interval
+    frequency: frequency
+    scheduleHours: scheduleHours
   }
 }
 

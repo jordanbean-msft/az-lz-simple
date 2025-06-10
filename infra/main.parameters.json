@@ -49,6 +49,20 @@
     },
     "privateEndpointSubnetAddressPrefix": {
       "value": "10.255.2.0/28"
+    },
+    "timeZone": {
+      "value": "Central Standard Time"
+    },
+    "interval": {
+      "value": 1
+    },
+    "frequency": {
+      "value": "Day"
+    },
+    "scheduleHours": {
+      "value": [
+        "18"
+      ]
     }
   }
 }
