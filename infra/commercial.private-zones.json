@@ -404,7 +404,8 @@
             "subresource": "account",
             "privateDnsZoneName": [
                 "privatelink.cognitiveservices.azure.com",
-                "privatelink.openai.azure.com"
+                "privatelink.openai.azure.com",
+                "privatelink.services.ai.azure.com"
             ]
         },
         {

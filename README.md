@@ -37,7 +37,7 @@ az dns-resolver inbound-endpoint show --resource-group <resource-group-name> --d
 
 1. Unzip the package & open the `AzureVPN/azurevpnconfig.xml` file.
 
-1. Add DNS inbound IP address to the XML file.
+1. Add DNS inbound IP address to the XML file. You may have to update the `<clientconfig>` section to include the `<dnsservers>` element with the inbound IP address of the DNS Private Resolver. The XML should look like this afterwards.
 
 ```xml
 <AzVpnProfile xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/">
