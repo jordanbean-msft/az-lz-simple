@@ -37,24 +37,24 @@ azd up
 
 ### Update DNS resolution through Azure VPN client
 
-1. Get inbound IP address of Azure Private Dns Resolver
+1. Get inbound IP address of DNS server (running in Container Instance).
 
 ```shell
-az dns-resolver inbound-endpoint show --resource-group <resource-group-name> --dns-resolver-name <dns-private-resolver-name> -n dns-private-resolver-inbound --query "ipConfigurations[0].privateIpAddress"
+az container show --resource-group <resource-group-name> --name <container-instance-name> --query "ipAddress.ip" -o tsv
 ```
 
 1. [Download](https://learn.microsoft.com/en-us/azure/vpn-gateway/point-to-site-entra-gateway#download) VPN client profile configuration package.
 
 1. Unzip the package & open the `AzureVPN/azurevpnconfig.xml` file.
 
-1. Add DNS inbound IP address to the XML file. You may have to update the `<clientconfig>` section to include the `<dnsservers>` element with the inbound IP address of the DNS Private Resolver. The XML should look like this afterwards.
+1. Add DNS IP address to the XML file. You may have to update the `<clientconfig>` section to include the `<dnsservers>` element with the inbound IP address of the DNS server. The XML should look like this afterwards.
 
 ```xml
 <AzVpnProfile xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/">
   ...
   <clientconfig>
 	<dnsservers>
-    <dnsserver><dns-resolver-inbound-ip-address></dnsserver>
+    <dnsserver><dns-server-ip-address></dnsserver>
   </dnsservers>
   </clientconfig>
   ...
@@ -81,7 +81,7 @@ az network vnet peering create -g <central-resource-group-name> -n <virtual-netw
 1. You will also need to set a custom DNS server to the IP address of the DNS Private Resolver.
 
 ```shell
-az network vnet update -g <resource-group-name> --name <virtual-network-name> --dns-servers <dns-resolver-inbound-ip-address>
+az network vnet update -g <resource-group-name> --name <virtual-network-name> --dns-servers <dns-server-ip-address>
 ```
 
 ## Test DNS resolution
