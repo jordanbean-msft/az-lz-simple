@@ -8,6 +8,9 @@
     "location": {
       "value": "${AZURE_LOCATION}"
     },
+    "resourceGroupName": {
+      "value": "${AZURE_RESOURCE_GROUP_NAME}"
+    },
     "virtualNetworkAddressSpace": {
       "value": [
         "10.255.0.0/16"
@@ -19,17 +22,11 @@
     "gatewaySubnetAddressPrefix": {
       "value": "10.255.0.0/24"
     },
-    "dnsPrivateResolverInboundSubnetName": {
-      "value": "dns-private-resolver-inbound"
+    "containerInstanceSubnetName": {
+      "value": "container-instance"
     },
-    "dnsPrivateResolverInboundSubnetAddressPrefix": {
+    "containerInstanceSubnetAddressPrefix": {
       "value": "10.255.1.0/28"
-    },
-    "dnsPrivateResolverOutboundSubnetName": {
-      "value": "dns-private-resolver-outbound"
-    },
-    "dnsPrivateResolverOutboundSubnetAddressPrefix": {
-      "value": "10.255.1.16/28"
     },
     "clientAddressPoolAddressPrefixes": {
       "value": [
@@ -63,6 +60,12 @@
       "value": [
         "18"
       ]
+    },
+    "dnsResolverImageName": {
+      "value": "${AZURE_DNS_RESOLVER_IMAGE_NAME}"
+    },
+    "containerRegistryName": {
+      "value": "${AZURE_CONTAINER_REGISTRY_NAME}"
     }
   }
 }

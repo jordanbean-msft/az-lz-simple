@@ -9,16 +9,14 @@ param environmentName string
 @description('Primary location for all resources')
 param location string
 
-param resourceGroupName string = ''
+param resourceGroupName string
 
 param virtualNetworkAddressSpace array
 param gatewaySubnetName string
 param gatewaySubnetAddressPrefix string
-param dnsPrivateResolverInboundSubnetName string
-param dnsPrivateResolverInboundSubnetAddressPrefix string
-param dnsPrivateResolverOutboundSubnetName string
-param dnsPrivateResolverOutboundSubnetAddressPrefix string
 param clientAddressPoolAddressPrefixes array
+param containerInstanceSubnetName string
+param containerInstanceSubnetAddressPrefix string
 param vpnGatewayServicePrincipalClientId string
 param customRoutesAddressPrefixes array
 @allowed(['commercial', 'government'])
@@ -29,6 +27,8 @@ param timeZone string
 param interval int
 param frequency string
 param scheduleHours array
+param dnsResolverImageName string
+param containerRegistryName string
 
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -38,12 +38,8 @@ var privateZonesMappingData = (privateZonesMappingDataFileType == 'commercial')
   ? loadJsonContent('./commercial.private-zones.json')
   : loadJsonContent('./government.private-zones.json')
 
-resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: !empty(resourceGroupName)
-    ? resourceGroupName
-    : '${abbrs.resourcesResourceGroups}central-${location}-${resourceToken}'
-  location: location
-  tags: tags
+resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
+  name: resourceGroupName
 }
 
 module names 'resource-names.bicep' = {
@@ -54,8 +50,8 @@ module names 'resource-names.bicep' = {
   }
 }
 
-module virtualNetwork './modules/virtual-network.bicep' = {
-  name: 'virtual-network'
+module virtualNetworkDeployment './modules/virtual-network.bicep' = {
+  name: 'virtual-network-deployment'
   scope: resourceGroup
   params: {
     virtualNetworkName: '${abbrs.networkVirtualNetworks}central-${location}-${resourceToken}'
@@ -63,31 +59,54 @@ module virtualNetwork './modules/virtual-network.bicep' = {
     virtualNetworkAddressSpace: virtualNetworkAddressSpace
     gatewaySubnetName: gatewaySubnetName
     gatewaySubnetAddressPrefix: gatewaySubnetAddressPrefix
-    dnsPrivateResolverInboundSubnetName: dnsPrivateResolverInboundSubnetName
-    dnsPrivateResolverInboundSubnetAddressPrefix: dnsPrivateResolverInboundSubnetAddressPrefix
-    dnsPrivateResolverInboundSubnetNsgName: '${abbrs.networkNetworkSecurityGroups}central-inbound-${location}-${resourceToken}'
-    dnsPrivateResolverOutboundSubnetName: dnsPrivateResolverOutboundSubnetName
-    dnsPrivateResolverOutboundSubnetAddressPrefix: dnsPrivateResolverOutboundSubnetAddressPrefix
-    dnsPrivateResolverOutboundSubnetNsgName: '${abbrs.networkNetworkSecurityGroups}central-outbound-${location}-${resourceToken}'
+    containerInstanceSubnetName: containerInstanceSubnetName
+    containerInstanceSubnetAddressPrefix: containerInstanceSubnetAddressPrefix
+    containerInstanceSubnetNsgName: '${abbrs.networkNetworkSecurityGroups}central-${location}-${resourceToken}'
     privateEndpointSubnetName: privateEndpointSubnetName
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
   }
 }
 
-module dnsPrivateResolver './modules/dns-private-resolver.bicep' = {
-  name: 'dns-private-resolver'
+module acrPullRoleAssignmentDeployment './modules/acr-pull-role-assignment.bicep' = {
+  name: 'acr-pull-role-assignment-deployment'
   scope: resourceGroup
   params: {
-    dnsResolverName: 'dnsresolver-central-${location}-${resourceToken}'
-    location: location
-    virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
-    inboundSubnetName: dnsPrivateResolverInboundSubnetName
-    outboundSubnetName: dnsPrivateResolverOutboundSubnetName
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    containerRegistryName: containerRegistryName
   }
 }
 
-module managedIdentity './modules/managed-identity.bicep' = {
-  name: 'managed-identity'
+module containerInstanceDeployment './modules/container-instance.bicep' = {
+  name: 'container-instance-deployment'
+  scope: resourceGroup
+  params: {
+    containerInstanceName: '${abbrs.containerInstanceContainerGroups}central-${location}-${resourceToken}'
+    location: location
+    subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetId
+    containerInstanceImage: dnsResolverImageName
+    managedIdentityName: managedIdentityDeployment.outputs.managedIdentityName
+    containerRegistryName: containerRegistryName
+  }
+  dependsOn: [
+    acrPullRoleAssignmentDeployment
+  ]
+}
+
+// module dnsPrivateResolver './modules/dns-private-resolver.bicep' = {
+//   name: 'dns-private-resolver'
+//   scope: resourceGroup
+//   params: {
+//     dnsResolverName: 'dnsresolver-central-${location}-${resourceToken}'
+//     location: location
+//     virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
+//     inboundSubnetName: dnsPrivateResolverInboundSubnetName
+//     outboundSubnetName: dnsPrivateResolverOutboundSubnetName
+//   }
+// }
+
+module managedIdentityDeployment './modules/managed-identity.bicep' = {
+  name: 'managed-identity-deployment'
   scope: resourceGroup
   params: {
     name: '${abbrs.managedIdentityUserAssignedIdentities}central-${location}-${resourceToken}'
@@ -95,22 +114,22 @@ module managedIdentity './modules/managed-identity.bicep' = {
   }
 }
 
-module roleAssignment './modules/role-assignment.bicep' = {
-  name: 'managed-identity-network-contributor-role-assignment'
+module networkContributorRoleAssignmentDeployment './modules/network-contributor-role-assignment.bicep' = {
+  name: 'managed-identity-network-contributor-role-assignment-deployment'
   params: {
-    principalId: managedIdentity.outputs.managedIdentityPrincipalId
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
     roleDefinitionId: '4d97b98b-1d4f-4787-a291-c67834d212e7' // Network Contributor
   }
 }
 
-module vpnGateway './modules/vpn-gateway.bicep' = {
-  name: 'vpn-gateway'
+module vpnGatewayDeployment './modules/vpn-gateway.bicep' = {
+  name: 'vpn-gateway-deployment'
   scope: resourceGroup
   params: {
     publicIpName: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
     vpnGatewayName: '${abbrs.networkVpnGateways}central-${location}-${resourceToken}'
     location: location
-    gatewaySubnetId: virtualNetwork.outputs.gatewaySubnetId
+    gatewaySubnetId: virtualNetworkDeployment.outputs.gatewaySubnetId
     clientAddressPoolAddressPrefixes: clientAddressPoolAddressPrefixes
     vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
     customRoutesAddressPrefixes: customRoutesAddressPrefixes
@@ -126,34 +145,34 @@ module vpnGateway './modules/vpn-gateway.bicep' = {
 //   }
 // }
 
-module policies './modules/policies.bicep' = {
-  name: 'policies'
+module policiesDeployment './modules/policies.bicep' = {
+  name: 'policies-deployment'
   params: {
     resourceGroupName: resourceGroup.name
-    userAssignedIdentityName: managedIdentity.outputs.managedIdentityName
+    userAssignedIdentityName: managedIdentityDeployment.outputs.managedIdentityName
     location: location
-    virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
+    virtualNetworkName: virtualNetworkDeployment.outputs.virtualNetworkName
     privateZonesMappingData: privateZonesMappingData
   }
 }
 
-module storageAccount './modules/storage-account.bicep' = {
-  name: 'storage-account'
+module storageAccountDeployment './modules/storage-account.bicep' = {
+  name: 'storage-account-deployment'
   scope: resourceGroup
   params: {
     storageAccountName: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
     location: location
-    privateEndpointSubnetId: virtualNetwork.outputs.privateEndpointSubnetId
+    privateEndpointSubnetId: virtualNetworkDeployment.outputs.privateEndpointSubnetId
   }
 }
 
-module logicApp './modules/logic-app.bicep' = {
-  name: 'logic-app'
+module logicAppDeployment './modules/logic-app.bicep' = {
+  name: 'logic-app-deployment'
   scope: resourceGroup
   params: {
     logicAppName: '${abbrs.logicWorkflows}central-${location}-${resourceToken}'
     location: location
-    managedIdentityId: managedIdentity.outputs.managedIdentityId
+    managedIdentityId: managedIdentityDeployment.outputs.managedIdentityId
     timeZone: timeZone
     interval: interval
     frequency: frequency

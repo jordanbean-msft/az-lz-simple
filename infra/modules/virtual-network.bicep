@@ -3,12 +3,9 @@ param virtualNetworkAddressSpace array
 param location string = resourceGroup().location
 param gatewaySubnetName string
 param gatewaySubnetAddressPrefix string
-param dnsPrivateResolverInboundSubnetName string
-param dnsPrivateResolverInboundSubnetAddressPrefix string
-param dnsPrivateResolverInboundSubnetNsgName string
-param dnsPrivateResolverOutboundSubnetName string
-param dnsPrivateResolverOutboundSubnetAddressPrefix string
-param dnsPrivateResolverOutboundSubnetNsgName string
+param containerInstanceSubnetName string
+param containerInstanceSubnetAddressPrefix string
+param containerInstanceSubnetNsgName string
 param privateEndpointSubnetName string
 param privateEndpointSubnetAddressPrefix string
 
@@ -31,81 +28,27 @@ resource gatewaySubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = 
   }
 }
 
-resource dnsPrivateResolverInboundSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
-  name: dnsPrivateResolverInboundSubnetName
+resource containerInstanceSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
+  name: containerInstanceSubnetName
   parent: virtualNetwork
   properties: {
-    addressPrefix: dnsPrivateResolverInboundSubnetAddressPrefix
+    addressPrefix: containerInstanceSubnetAddressPrefix
     networkSecurityGroup: {
-      id: dnsPrivateResolverInboundSubnetNsg.id
+      id: containerInstanceSubnetNsg.id
     }
     delegations: [
       {
-        name: 'Microsoft.Network.dnsResolvers'
+        name: 'containerGroups'
         properties: {
-          serviceName: 'Microsoft.Network/dnsResolvers'
+          serviceName: 'Microsoft.ContainerInstance/containerGroups'
         }
       }
     ]
   }
 }
 
-resource dnsPrivateResolverOutboundSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
-  name: dnsPrivateResolverOutboundSubnetName
-  parent: virtualNetwork
-  properties: {
-    addressPrefix: dnsPrivateResolverOutboundSubnetAddressPrefix
-    networkSecurityGroup: {
-      id: dnsPrivateResolverOutboundSubnetNsg.id
-    }
-    delegations: [
-      {
-        name: 'Microsoft.Network/dnsResolvers'
-        properties: {
-          serviceName: 'Microsoft.Network/dnsResolvers'
-        }
-      }
-    ]
-  }
-}
-
-resource dnsPrivateResolverInboundSubnetNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
-  name: dnsPrivateResolverInboundSubnetNsgName
-  location: location
-  properties: {
-    securityRules: [
-      {
-        name: 'AllowAllInbound'
-        properties: {
-          priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-      {
-        name: 'AllowAllOutbound'
-        properties: {
-          priority: 100
-          direction: 'Outbound'
-          access: 'Allow'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-    ]
-  }
-}
-
-resource dnsPrivateResolverOutboundSubnetNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
-  name: dnsPrivateResolverOutboundSubnetNsgName
+resource containerInstanceSubnetNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+  name: containerInstanceSubnetNsgName
   location: location
   properties: {
     securityRules: [
@@ -186,6 +129,5 @@ resource privateEndpointSubnetNsg 'Microsoft.Network/networkSecurityGroups@2023-
 output virtualNetworkName string = virtualNetwork.name
 output gatewaySubnetName string = gatewaySubnet.name
 output gatewaySubnetId string = gatewaySubnet.id
-output dnsPrivateResolverInboundSubnetId string = dnsPrivateResolverInboundSubnet.id
-output dnsPrivateResolverOutboundSubnetId string = dnsPrivateResolverOutboundSubnet.id
+output containerInstanceSubnetId string = containerInstanceSubnet.id
 output privateEndpointSubnetId string = privateEndpointSubnet.id

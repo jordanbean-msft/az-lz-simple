@@ -25,7 +25,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
 }
 
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' = {
-  name: '$pe-blob-${storageAccountName}'
+  name: 'pe-blob-${storageAccountName}'
   location: location
   properties: {
     subnet: {
@@ -33,7 +33,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' = {
     }
     privateLinkServiceConnections: [
       {
-        name: '$pe-blob-${storageAccountName}'
+        name: 'pe-blob-${storageAccountName}'
         properties: {
           privateLinkServiceId: storageAccount.id
           groupIds: [

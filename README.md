@@ -1,6 +1,6 @@
 # az-lz-simple
 
-![architecture](./.img/architecture.png)
+![architecture](./.img/architecture.drawio.png)
 
 The blog post that reviews this architecture can be found [here](https://jordanbeandev.com/how-to-set-up-a-simple-hub-spoke-network-in-azure/).
 
@@ -14,10 +14,20 @@ The blog post that reviews this architecture can be found [here](https://jordanb
 - Azure subscription & resource group
 - [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd?tabs=winget-windows%2Cbrew-mac%2Cscript-linux&pivots=os-windows)
 - [Azure VPN Client](https://learn.microsoft.com/en-us/azure/vpn-gateway/point-to-site-entra-vpn-client-windows#download)
+- [Docker](https://docs.docker.com/get-docker/)
 
 ## Deployment
 
 ### Deploy initial infrastructure
+
+1. Create a resource group and set the AZD env var to the resource group name.
+
+```shell
+az group create --name <resource-group-name> --location <location>
+```
+
+azd env set AZURE_RESOURCE_GROUP_NAME <resource-group-name>
+```
 
 1. Run the following Azure Developer CLI command to deploy the infrastructure.
 
