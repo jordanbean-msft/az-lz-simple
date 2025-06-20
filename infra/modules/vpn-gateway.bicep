@@ -1,24 +1,26 @@
-param publicIpName string
-param vpnGatewayName string
-param location string
-param gatewaySubnetId string
-param clientAddressPoolAddressPrefixes array
+param clientAddressPoolAddressPrefix string
 param vpnGatewayServicePrincipalClientId string
 param customRoutesAddressPrefixes array
+param resourceToken string
+param abbrs object
+param location string
+param logAnalyticsWorkspaceId string
+param virtualNetworkName string
+param gatewaySubnetId string
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
-  name: publicIpName
+  name: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
   location: location
   sku: {
     name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Static'    
+    publicIPAllocationMethod: 'Static'
   }
 }
 
 resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
-  name: vpnGatewayName
+  name: '${abbrs.networkVpnGateways}central-${location}-${resourceToken}'
   location: location
   properties: {
     ipConfigurations: [
@@ -31,9 +33,9 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
           }
           subnet: {
             id: gatewaySubnetId
+          }
         }
       }
-    }
     ]
     sku: {
       name: 'VpnGw1'
@@ -46,7 +48,7 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
         'OpenVPN'
       ]
       vpnClientAddressPool: {
-        addressPrefixes: clientAddressPoolAddressPrefixes        
+        addressPrefixes: [clientAddressPoolAddressPrefix]
       }
       vpnAuthenticationTypes: [
         'AAD'

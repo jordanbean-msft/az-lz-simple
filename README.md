@@ -24,10 +24,11 @@ The blog post that reviews this architecture can be found [here](https://jordanb
 
 ```shell
 az group create --name <resource-group-name> --location <location>
-```
 
 azd env set AZURE_RESOURCE_GROUP_NAME <resource-group-name>
 ```
+
+1. Check the `infra/main.parameters.json` file and update the parameters as needed.
 
 1. Run the following Azure Developer CLI command to deploy the infrastructure.
 

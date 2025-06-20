@@ -1,33 +1,32 @@
-param containerInstanceName string
+param resourceToken string
+param abbrs object
 param location string
 param subnetId string
 param containerInstanceImage string
-param managedIdentityName string
+param managedIdentityResourceId string
 param containerRegistryName string
+param logAnalyticsWorkspaceId string
 
-resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: managedIdentityName
-}
-
-resource containerInstance 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
-  name: containerInstanceName
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${managedIdentity.id}': {}
+module containerInstance 'br/public:avm/res/container-instance/container-group:0.6.0' = {
+  name: 'container-instance'
+  params: {
+    name: '${abbrs.containerInstanceContainerGroups}central-${location}-${resourceToken}-dns'
+    location: location
+    managedIdentities: {
+      userAssignedResourceIds: [
+        managedIdentityResourceId
+      ]
     }
-  }
-  properties: {
+    availabilityZone: -1
     containers: [
       {
-        name: containerInstanceName
+        name: 'dns'
         properties: {
           image: containerInstanceImage
           resources: {
             requests: {
               cpu: 1
-              memoryInGB: 1
+              memoryInGB: '1'
             }
           }
           ports: [
@@ -50,16 +49,24 @@ resource containerInstance 'Microsoft.ContainerInstance/containerGroups@2023-05-
       ]
       type: 'Private'
     }
-    subnetIds: [
+    subnets: [
       {
-        id: subnetId
+        subnetResourceId: subnetId
       }
     ]
     imageRegistryCredentials: [
       {
         server: '${containerRegistryName}${environment().suffixes.acrLoginServer}'
-        identity: managedIdentity.id
+        identity: managedIdentityResourceId
       }
     ]
+    logAnalytics: {
+      logType: 'ContainerInstanceLogs'
+      workspaceResourceId: logAnalyticsWorkspaceId
+    }
   }
 }
+
+output containerInstanceName string = containerInstance.outputs.name
+output containerInstanceResourceId string = containerInstance.outputs.resourceId
+output containerInstanceFqdn string = containerInstance.outputs.iPv4Address

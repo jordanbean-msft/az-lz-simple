@@ -1,9 +1,12 @@
-param storageAccountName string
+param resourceToken string
+param abbrs object
 param location string
-param privateEndpointSubnetId string
+param privateEndpointSubnetResourceId string
+param logAnalyticsWorkspaceResourceId string
+param publicNetworkAccess string
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
-  name: storageAccountName
+  name: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
   location: location
   sku: {
     name: 'Standard_LRS'
@@ -25,15 +28,15 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
 }
 
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' = {
-  name: 'pe-blob-${storageAccountName}'
+  name: 'pe-blob-${storageAccount.name}'
   location: location
   properties: {
     subnet: {
-      id: privateEndpointSubnetId
+      id: privateEndpointSubnetResourceId
     }
     privateLinkServiceConnections: [
       {
-        name: 'pe-blob-${storageAccountName}'
+        name: 'pe-blob-${storageAccount.name}'
         properties: {
           privateLinkServiceId: storageAccount.id
           groupIds: [

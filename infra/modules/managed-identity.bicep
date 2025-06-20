@@ -1,12 +1,16 @@
-param name string
 param location string
+param abbrs object
+param resourceToken string
 
-resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: name
-  location: location
+module identity 'br/public:avm/res/managed-identity/user-assigned-identity:0.2.1' = {
+  name: 'identity'
+  params: {
+    name: '${abbrs.managedIdentityUserAssignedIdentities}central-${location}-${resourceToken}'
+    location: location
+  }
 }
 
-output managedIdentityName string = managedIdentity.name
-output managedIdentityPrincipalId string = managedIdentity.properties.principalId
-output managedIdentityClientId string = managedIdentity.properties.clientId
-output managedIdentityId string = managedIdentity.id
+output managedIdentityResourceId string = identity.outputs.resourceId
+output managedIdentityClientId string = identity.outputs.clientId
+output managedIdentityPrincipalId string = identity.outputs.principalId
+output managedIdentityName string = identity.outputs.name

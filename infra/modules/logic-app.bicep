@@ -1,10 +1,12 @@
-param logicAppName string
+param resourceToken string
+param abbrs object
 param location string
 param managedIdentityId string
 param timeZone string
 param interval int
 param frequency string
 param scheduleHours array
+param logAnalyticsWorkspaceId string
 
 resource armConnection 'Microsoft.Web/connections@2016-06-01' = {
   name: 'arm'
@@ -21,8 +23,8 @@ resource armConnection 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
-resource logicApp 'Microsoft.Logic/workflows@2017-07-01' = {
-  name: logicAppName
+resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
+  name: '${abbrs.logicWorkflows}central-${location}-${resourceToken}-stop-compute'
   location: location
   identity: {
     type: 'UserAssigned'
@@ -287,4 +289,4 @@ resource logicApp 'Microsoft.Logic/workflows@2017-07-01' = {
   }
 }
 
-output logicAppId string = logicApp.id
+output logicAppId string = workflow.id

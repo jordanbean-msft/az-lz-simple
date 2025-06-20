@@ -14,7 +14,7 @@ param resourceGroupName string
 param virtualNetworkAddressSpace array
 param gatewaySubnetName string
 param gatewaySubnetAddressPrefix string
-param clientAddressPoolAddressPrefixes array
+param clientAddressPoolAddressPrefix string
 param containerInstanceSubnetName string
 param containerInstanceSubnetAddressPrefix string
 param vpnGatewayServicePrincipalClientId string
@@ -50,18 +50,28 @@ module names 'resource-names.bicep' = {
   }
 }
 
+module logAnalyticsWorkspaceDeployment './modules/log-analytics.bicep' = {
+  name: 'log-analytics-workspace-deployment'
+  scope: resourceGroup
+  params: {
+    location: location
+    resourceToken: resourceToken
+    abbrs: abbrs
+  }
+}
+
 module virtualNetworkDeployment './modules/virtual-network.bicep' = {
   name: 'virtual-network-deployment'
   scope: resourceGroup
   params: {
-    virtualNetworkName: '${abbrs.networkVirtualNetworks}central-${location}-${resourceToken}'
+    resourceToken: resourceToken
+    abbrs: abbrs
     location: location
     virtualNetworkAddressSpace: virtualNetworkAddressSpace
     gatewaySubnetName: gatewaySubnetName
     gatewaySubnetAddressPrefix: gatewaySubnetAddressPrefix
     containerInstanceSubnetName: containerInstanceSubnetName
     containerInstanceSubnetAddressPrefix: containerInstanceSubnetAddressPrefix
-    containerInstanceSubnetNsgName: '${abbrs.networkNetworkSecurityGroups}central-${location}-${resourceToken}'
     privateEndpointSubnetName: privateEndpointSubnetName
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
   }
@@ -81,12 +91,14 @@ module containerInstanceDeployment './modules/container-instance.bicep' = {
   name: 'container-instance-deployment'
   scope: resourceGroup
   params: {
-    containerInstanceName: '${abbrs.containerInstanceContainerGroups}central-${location}-${resourceToken}'
     location: location
-    subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetId
+    subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetResourceId
     containerInstanceImage: dnsResolverImageName
-    managedIdentityName: managedIdentityDeployment.outputs.managedIdentityName
+    managedIdentityResourceId: managedIdentityDeployment.outputs.managedIdentityResourceId
     containerRegistryName: containerRegistryName
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
+    abbrs: abbrs
+    resourceToken: resourceToken
   }
   dependsOn: [
     acrPullRoleAssignmentDeployment
@@ -109,8 +121,9 @@ module managedIdentityDeployment './modules/managed-identity.bicep' = {
   name: 'managed-identity-deployment'
   scope: resourceGroup
   params: {
-    name: '${abbrs.managedIdentityUserAssignedIdentities}central-${location}-${resourceToken}'
     location: location
+    abbrs: abbrs
+    resourceToken: resourceToken
   }
 }
 
@@ -126,13 +139,15 @@ module vpnGatewayDeployment './modules/vpn-gateway.bicep' = {
   name: 'vpn-gateway-deployment'
   scope: resourceGroup
   params: {
-    publicIpName: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
-    vpnGatewayName: '${abbrs.networkVpnGateways}central-${location}-${resourceToken}'
+    resourceToken: resourceToken
+    abbrs: abbrs
     location: location
-    gatewaySubnetId: virtualNetworkDeployment.outputs.gatewaySubnetId
-    clientAddressPoolAddressPrefixes: clientAddressPoolAddressPrefixes
+    clientAddressPoolAddressPrefix: clientAddressPoolAddressPrefix
     vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
     customRoutesAddressPrefixes: customRoutesAddressPrefixes
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
+    virtualNetworkName: virtualNetworkDeployment.outputs.virtualNetworkName
+    gatewaySubnetId: virtualNetworkDeployment.outputs.gatewaySubnetResourceId
   }
 }
 
@@ -160,9 +175,12 @@ module storageAccountDeployment './modules/storage-account.bicep' = {
   name: 'storage-account-deployment'
   scope: resourceGroup
   params: {
-    storageAccountName: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
+    resourceToken: resourceToken
+    abbrs: abbrs
     location: location
-    privateEndpointSubnetId: virtualNetworkDeployment.outputs.privateEndpointSubnetId
+    logAnalyticsWorkspaceResourceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
+    privateEndpointSubnetResourceId: virtualNetworkDeployment.outputs.privateEndpointSubnetResourceId
+    publicNetworkAccess: 'Disabled'
   }
 }
 
@@ -170,13 +188,15 @@ module logicAppDeployment './modules/logic-app.bicep' = {
   name: 'logic-app-deployment'
   scope: resourceGroup
   params: {
-    logicAppName: '${abbrs.logicWorkflows}central-${location}-${resourceToken}'
+    resourceToken: resourceToken
+    abbrs: abbrs
     location: location
-    managedIdentityId: managedIdentityDeployment.outputs.managedIdentityId
+    managedIdentityId: managedIdentityDeployment.outputs.managedIdentityResourceId
     timeZone: timeZone
     interval: interval
     frequency: frequency
     scheduleHours: scheduleHours
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }
 
