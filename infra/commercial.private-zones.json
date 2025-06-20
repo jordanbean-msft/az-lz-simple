@@ -621,6 +621,14 @@
             "privateDnsZoneName": [
                 "azure-api.net"
             ]
+        },
+        {
+            "resource": "Azure Container Apps",
+            "privateLinkResourceType": "Microsoft.App/ManagedEnvironments",
+            "subresource": "managedEnvironments",
+            "privateDnsZoneName": [
+                "privatelink.eastus2.azurecontainerapps.io"
+            ]
         }
     ]
 }
