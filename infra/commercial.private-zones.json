@@ -615,14 +615,6 @@
             ]
         },
         {
-            "resource": "Azure API Management",
-            "privateLinkResourceType": "",
-            "subresource": "",
-            "privateDnsZoneName": [
-                "azure-api.net"
-            ]
-        },
-        {
             "resource": "Azure Container Apps",
             "privateLinkResourceType": "Microsoft.App/ManagedEnvironments",
             "subresource": "managedEnvironments",

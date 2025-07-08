@@ -127,7 +127,7 @@ module managedIdentityDeployment './modules/managed-identity.bicep' = {
   }
 }
 
-module networkContributorRoleAssignmentDeployment './modules/network-contributor-role-assignment.bicep' = {
+module networkContributorRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
   name: 'managed-identity-network-contributor-role-assignment-deployment'
   params: {
     principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
@@ -145,8 +145,6 @@ module vpnGatewayDeployment './modules/vpn-gateway.bicep' = {
     clientAddressPoolAddressPrefix: clientAddressPoolAddressPrefix
     vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
     customRoutesAddressPrefixes: customRoutesAddressPrefixes
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
-    virtualNetworkName: virtualNetworkDeployment.outputs.virtualNetworkName
     gatewaySubnetId: virtualNetworkDeployment.outputs.gatewaySubnetResourceId
   }
 }
@@ -178,9 +176,39 @@ module storageAccountDeployment './modules/storage-account.bicep' = {
     resourceToken: resourceToken
     abbrs: abbrs
     location: location
-    logAnalyticsWorkspaceResourceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
     privateEndpointSubnetResourceId: virtualNetworkDeployment.outputs.privateEndpointSubnetResourceId
-    publicNetworkAccess: 'Disabled'
+  }
+}
+
+module readerRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'managed-identity-reader-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: 'acdd72a7-3385-48ef-bd42-f606fba81ae7' // Reader
+  }
+}
+
+module containerAppsOperatorRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'container-apps-operator-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: 'f3bd1b5c-91fa-40e7-afe7-0c11d331232c' // Container Apps Operator
+  }
+}
+
+module aksRbacClusterAdminRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'aks-rbac-cluster-admin-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b' // AKS RBAC Cluster Admin
+  }
+}
+
+module webPlanContributorAdminRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'web-plan-contributor-admin-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: '2cc479cb-7b4d-49a8-b449-8c00fd0f0a4b' // Web Plan Contributor Admin
   }
 }
 

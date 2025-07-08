@@ -4,8 +4,6 @@ param customRoutesAddressPrefixes array
 param resourceToken string
 param abbrs object
 param location string
-param logAnalyticsWorkspaceId string
-param virtualNetworkName string
 param gatewaySubnetId string
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2024-01-01' = {

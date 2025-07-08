@@ -2,8 +2,6 @@ param resourceToken string
 param abbrs object
 param location string
 param privateEndpointSubnetResourceId string
-param logAnalyticsWorkspaceResourceId string
-param publicNetworkAccess string
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: '${abbrs.storageStorageAccounts}${location}${resourceToken}'

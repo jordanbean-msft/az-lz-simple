@@ -16,11 +16,24 @@ module privateEndpointNetworkSecurityGroup 'br/public:avm/res/network/network-se
     location: location
     securityRules: [
       {
-        name: 'AllowAllInbound'
+        name: 'AllowHttpsInbound'
         properties: {
           access: 'Allow'
           direction: 'Inbound'
           priority: 100
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: privateEndpointSubnetAddressPrefix
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'DenyAllInbound'
+        properties: {
+          access: 'Deny'
+          direction: 'Inbound'
+          priority: 4096
           protocol: '*'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
@@ -29,11 +42,11 @@ module privateEndpointNetworkSecurityGroup 'br/public:avm/res/network/network-se
         }
       }
       {
-        name: 'AllowAllOutbound'
+        name: 'DenyAllOutbound'
         properties: {
-          access: 'Allow'
+          access: 'Deny'
           direction: 'Outbound'
-          priority: 100
+          priority: 4096
           protocol: '*'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
@@ -52,11 +65,50 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
     location: location
     securityRules: [
       {
-        name: 'AllowAllInbound'
+        name: 'AllowHttpsInbound'
         properties: {
           access: 'Allow'
           direction: 'Inbound'
           priority: 100
+          protocol: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'AllowDnsInbound'
+        properties: {
+          access: 'Allow'
+          direction: 'Inbound'
+          priority: 110
+          protocol: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationPortRanges: ['53']
+        }
+      }
+      {
+        name: 'AllowAzurePortalAccessInbound'
+        properties: {
+          access: 'Allow'
+          direction: 'Inbound'
+          priority: 120
+          protocol: '*'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationPortRange: '19390'
+        }
+      }
+      {
+        name: 'DenyAllInbound'
+        properties: {
+          access: 'Deny'
+          direction: 'Inbound'
+          priority: 4096
           protocol: '*'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
@@ -65,11 +117,37 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
         }
       }
       {
-        name: 'AllowAllOutbound'
+        name: 'AllowHttpsOutbound'
         properties: {
           access: 'Allow'
           direction: 'Outbound'
           priority: 100
+          protocol: '*'
+          sourceAddressPrefix: containerInstanceSubnetAddressPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: privateEndpointSubnetAddressPrefix
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'AllowDnsOutbound'
+        properties: {
+          access: 'Allow'
+          direction: 'Outbound'
+          priority: 110
+          protocol: '*'
+          sourceAddressPrefix: containerInstanceSubnetAddressPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRanges: ['53']
+        }
+      }
+      {
+        name: 'DenyAllOutbound'
+        properties: {
+          access: 'Deny'
+          direction: 'Outbound'
+          priority: 4096
           protocol: '*'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
