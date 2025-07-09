@@ -289,4 +289,24 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
   }
 }
 
+resource logicAppLogging 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'logging'
+  scope: workflow
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
 output logicAppId string = workflow.id

@@ -5,6 +5,7 @@ param resourceToken string
 param abbrs object
 param location string
 param gatewaySubnetId string
+param logAnalyticsWorkspaceId string
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
   name: '${abbrs.networkPublicIPAddresses}central-${location}-${resourceToken}'
@@ -71,6 +72,26 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
     disableIPSecReplayProtection: false
     natRules: []
     enablePrivateIpAddress: false
+  }
+}
+
+resource vpnGatewayLogging 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'logging'
+  scope: vpnGateway
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
   }
 }
 

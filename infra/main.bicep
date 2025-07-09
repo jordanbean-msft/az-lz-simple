@@ -146,6 +146,7 @@ module vpnGatewayDeployment './modules/vpn-gateway.bicep' = {
     vpnGatewayServicePrincipalClientId: vpnGatewayServicePrincipalClientId
     customRoutesAddressPrefixes: customRoutesAddressPrefixes
     gatewaySubnetId: virtualNetworkDeployment.outputs.gatewaySubnetResourceId
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }
 
@@ -177,6 +178,7 @@ module storageAccountDeployment './modules/storage-account.bicep' = {
     abbrs: abbrs
     location: location
     privateEndpointSubnetResourceId: virtualNetworkDeployment.outputs.privateEndpointSubnetResourceId
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }
 

@@ -2,6 +2,7 @@ param resourceToken string
 param abbrs object
 param location string
 param privateEndpointSubnetResourceId string
+param logAnalyticsWorkspaceId string
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
@@ -45,6 +46,26 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' = {
     ]
   }
 }
+
+// resource storageAccountLogging 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+//   name: 'logging'
+//   scope: storageAccount
+//   properties: {
+//     workspaceId: logAnalyticsWorkspaceId
+//     logs: [
+//       {
+//         category: 'transaction'
+//         enabled: true
+//       }
+//     ]
+//     metrics: [
+//       {
+//         category: 'AllMetrics'
+//         enabled: true
+//       }
+//     ]
+//   }
+// }
 
 output storageAccountId string = storageAccount.id
 output storageAccountName string = storageAccount.name
