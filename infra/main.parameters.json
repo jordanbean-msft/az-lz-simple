@@ -22,10 +22,10 @@
     "gatewaySubnetAddressPrefix": {
       "value": "10.255.0.0/24"
     },
-    "containerInstanceSubnetName": {
-      "value": "container-instance"
+    "vmSubnetName": {
+      "value": "vm"
     },
-    "containerInstanceSubnetAddressPrefix": {
+    "vmSubnetAddressPrefix": {
       "value": "10.255.1.0/29"
     },
     "clientAddressPoolAddressPrefix": {
@@ -65,6 +65,18 @@
     },
     "containerRegistryName": {
       "value": "${AZURE_CONTAINER_REGISTRY_NAME}"
+    },
+    "githubRepoUrl": {
+      "value": "${AZURE_GITHUB_REPO_URL}"
+    },
+    "githubRunnerToken": {
+      "value": "${AZURE_GITHUB_RUNNER_TOKEN}"
+    },
+    "adminUsername": {
+      "value": "${AZURE_ADMIN_USERNAME}"
+    },
+    "adminPassword": {
+      "value": "${AZURE_ADMIN_PASSWORD}"
     }
   }
 }

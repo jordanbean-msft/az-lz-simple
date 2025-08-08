@@ -1,0 +1,32 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+    - docker.io
+
+write_files:
+    - path: /opt/Corefile
+      permissions: '0644'
+      content: |
+          . {
+                    forward . 168.63.129.16
+            }
+
+    - path: /opt/coredns-setup.sh
+      permissions: '0755'
+      content: |
+          #!/bin/bash
+          set -e
+          systemctl enable --now docker
+          docker pull coredns/coredns:1.12.2
+          systemctl stop systemd-resolved
+          systemctl disable systemd-resolved
+          rm -f /etc/resolv.conf
+          echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+          docker run -d --name coredns \
+              -p 53:53/tcp -p 53:53/udp \
+              -v /opt/Corefile:/Corefile \
+              coredns/coredns:1.12.2 -conf /Corefile
+
+runcmd:
+    - bash /opt/coredns-setup.sh

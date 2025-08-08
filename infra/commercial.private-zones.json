@@ -538,7 +538,7 @@
         {
             "resource": "Azure API Management",
             "privateLinkResourceType": "Microsoft.ApiManagement/service",
-            "subresource": "gateway",
+            "subresource": "Gateway",
             "privateDnsZoneName": [
                 "privatelink.azure-api.net"
             ]

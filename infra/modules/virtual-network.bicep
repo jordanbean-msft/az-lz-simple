@@ -2,8 +2,8 @@ param virtualNetworkAddressSpace array
 param location string
 param gatewaySubnetAddressPrefix string
 param gatewaySubnetName string
-param containerInstanceSubnetName string
-param containerInstanceSubnetAddressPrefix string
+param vmSubnetName string
+param vmSubnetAddressPrefix string
 param privateEndpointSubnetName string
 param privateEndpointSubnetAddressPrefix string
 param resourceToken string
@@ -58,10 +58,10 @@ module privateEndpointNetworkSecurityGroup 'br/public:avm/res/network/network-se
   }
 }
 
-module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-security-group:0.5.1' = {
-  name: 'container-instance-network-security-group'
+module vmNetworkSecurityGroup 'br/public:avm/res/network/network-security-group:0.5.1' = {
+  name: 'vm-network-security-group'
   params: {
-    name: '${abbrs.networkNetworkSecurityGroups}${resourceToken}-container-instance'
+    name: '${abbrs.networkNetworkSecurityGroups}${resourceToken}-vm'
     location: location
     securityRules: [
       {
@@ -73,7 +73,7 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
           protocol: '*'
           sourceAddressPrefix: 'VirtualNetwork'
           sourcePortRange: '*'
-          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationAddressPrefix: vmSubnetAddressPrefix
           destinationPortRanges: ['80', '443']
         }
       }
@@ -86,7 +86,7 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
           protocol: '*'
           sourceAddressPrefix: 'VirtualNetwork'
           sourcePortRange: '*'
-          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationAddressPrefix: vmSubnetAddressPrefix
           destinationPortRanges: ['53']
         }
       }
@@ -99,7 +99,7 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
           protocol: '*'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
-          destinationAddressPrefix: containerInstanceSubnetAddressPrefix
+          destinationAddressPrefix: vmSubnetAddressPrefix
           destinationPortRange: '19390'
         }
       }
@@ -117,15 +117,28 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
         }
       }
       {
-        name: 'AllowHttpsOutbound'
+        name: 'AllowHttpsOutboundToPrivateEndpoints'
         properties: {
           access: 'Allow'
           direction: 'Outbound'
           priority: 100
           protocol: '*'
-          sourceAddressPrefix: containerInstanceSubnetAddressPrefix
+          sourceAddressPrefix: vmSubnetAddressPrefix
           sourcePortRange: '*'
           destinationAddressPrefix: privateEndpointSubnetAddressPrefix
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'AllowHttpsOutbound'
+        properties: {
+          access: 'Allow'
+          direction: 'Outbound'
+          priority: 110
+          protocol: '*'
+          sourceAddressPrefix: vmSubnetAddressPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'Internet'
           destinationPortRanges: ['80', '443']
         }
       }
@@ -134,9 +147,9 @@ module containerInstanceNetworkSecurityGroup 'br/public:avm/res/network/network-
         properties: {
           access: 'Allow'
           direction: 'Outbound'
-          priority: 110
+          priority: 120
           protocol: '*'
-          sourceAddressPrefix: containerInstanceSubnetAddressPrefix
+          sourceAddressPrefix: vmSubnetAddressPrefix
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRanges: ['53']
@@ -171,10 +184,9 @@ module virtualNetwork 'br/public:avm/res/network/virtual-network:0.6.1' = {
         addressPrefix: gatewaySubnetAddressPrefix
       }
       {
-        name: containerInstanceSubnetName
-        addressPrefix: containerInstanceSubnetAddressPrefix
-        networkSecurityGroupResourceId: containerInstanceNetworkSecurityGroup.outputs.resourceId
-        delegation: 'Microsoft.ContainerInstance/containerGroups'
+        name: vmSubnetName
+        addressPrefix: vmSubnetAddressPrefix
+        networkSecurityGroupResourceId: vmNetworkSecurityGroup.outputs.resourceId
       }
       {
         name: privateEndpointSubnetName
@@ -188,7 +200,7 @@ module virtualNetwork 'br/public:avm/res/network/virtual-network:0.6.1' = {
 output virtualNetworkName string = virtualNetwork.outputs.name
 output gatewaySubnetName string = gatewaySubnetName
 output gatewaySubnetResourceId string = '${virtualNetwork.outputs.resourceId}/subnets/${gatewaySubnetName}'
-output containerInstanceSubnetName string = containerInstanceSubnetName
-output containerInstanceSubnetResourceId string = '${virtualNetwork.outputs.resourceId}/subnets/${containerInstanceSubnetName}'
+output vmSubnetName string = vmSubnetName
+output vmSubnetResourceId string = '${virtualNetwork.outputs.resourceId}/subnets/${vmSubnetName}'
 output privateEndpointSubnetName string = privateEndpointSubnetName
 output privateEndpointSubnetResourceId string = '${virtualNetwork.outputs.resourceId}/subnets/${privateEndpointSubnetName}'

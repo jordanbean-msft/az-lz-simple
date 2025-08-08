@@ -15,8 +15,8 @@ param virtualNetworkAddressSpace array
 param gatewaySubnetName string
 param gatewaySubnetAddressPrefix string
 param clientAddressPoolAddressPrefix string
-param containerInstanceSubnetName string
-param containerInstanceSubnetAddressPrefix string
+param vmSubnetName string
+param vmSubnetAddressPrefix string
 param vpnGatewayServicePrincipalClientId string
 param customRoutesAddressPrefixes array
 @allowed(['commercial', 'government'])
@@ -27,8 +27,27 @@ param timeZone string
 param interval int
 param frequency string
 param scheduleHours array
-param dnsResolverImageName string
+//param dnsResolverImageName string
 param containerRegistryName string
+param githubRepoUrl string
+@secure()
+param githubRunnerToken string
+@secure()
+param adminUsername string
+@secure()
+param adminPassword string
+
+var dnsResolverCloudInitTemplate = loadTextContent('cloud-init/dns-resolver.txt')
+var githubActionsRunnerCloudInitTemplate = loadTextContent('cloud-init/github-actions-runner.txt')
+
+//replace the string "<YOUR_GITHUB_REPO_URL>" with the actual GitHub repo URL
+var githubActionsRunnerCloudInit = replace(
+  replace(githubActionsRunnerCloudInitTemplate, '<YOUR_GITHUB_REPO_URL>', githubRepoUrl),
+  '<YOUR_RUNNER_TOKEN>',
+  githubRunnerToken
+)
+
+var dnsResolverCloudInit = dnsResolverCloudInitTemplate
 
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -70,8 +89,8 @@ module virtualNetworkDeployment './modules/virtual-network.bicep' = {
     virtualNetworkAddressSpace: virtualNetworkAddressSpace
     gatewaySubnetName: gatewaySubnetName
     gatewaySubnetAddressPrefix: gatewaySubnetAddressPrefix
-    containerInstanceSubnetName: containerInstanceSubnetName
-    containerInstanceSubnetAddressPrefix: containerInstanceSubnetAddressPrefix
+    vmSubnetName: vmSubnetName
+    vmSubnetAddressPrefix: vmSubnetAddressPrefix
     privateEndpointSubnetName: privateEndpointSubnetName
     privateEndpointSubnetAddressPrefix: privateEndpointSubnetAddressPrefix
   }
@@ -87,23 +106,23 @@ module acrPullRoleAssignmentDeployment './modules/acr-pull-role-assignment.bicep
   }
 }
 
-module containerInstanceDeployment './modules/container-instance.bicep' = {
-  name: 'container-instance-deployment'
-  scope: resourceGroup
-  params: {
-    location: location
-    subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetResourceId
-    containerInstanceImage: dnsResolverImageName
-    managedIdentityResourceId: managedIdentityDeployment.outputs.managedIdentityResourceId
-    containerRegistryName: containerRegistryName
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
-    abbrs: abbrs
-    resourceToken: resourceToken
-  }
-  dependsOn: [
-    acrPullRoleAssignmentDeployment
-  ]
-}
+// module containerInstanceDeployment './modules/container-instance.bicep' = {
+//   name: 'container-instance-deployment'
+//   scope: resourceGroup
+//   params: {
+//     location: location
+//     subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetResourceId
+//     containerInstanceImage: dnsResolverImageName
+//     managedIdentityResourceId: managedIdentityDeployment.outputs.managedIdentityResourceId
+//     containerRegistryName: containerRegistryName
+//     logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
+//     abbrs: abbrs
+//     resourceToken: resourceToken
+//   }
+//   dependsOn: [
+//     acrPullRoleAssignmentDeployment
+//   ]
+// }
 
 // module dnsPrivateResolver './modules/dns-private-resolver.bicep' = {
 //   name: 'dns-private-resolver'
@@ -116,6 +135,53 @@ module containerInstanceDeployment './modules/container-instance.bicep' = {
 //     outboundSubnetName: dnsPrivateResolverOutboundSubnetName
 //   }
 // }
+
+module dnsResolverDeployment './modules/virtual-machine.bicep' = {
+  name: 'dns-resolver-deployment'
+  scope: resourceGroup
+  params: {
+    location: location
+    subnetResourceId: virtualNetworkDeployment.outputs.vmSubnetResourceId
+    resourceToken: '-dns-${resourceToken}'
+    abbrs: abbrs
+    adminUsername: adminUsername
+    adminPassword: adminPassword
+    customData: dnsResolverCloudInit
+    diskSizeGB: 30
+    osType: 'Linux'
+    sku: '22_04-lts'
+    publisher: 'Canonical'
+    offer: '0001-com-ubuntu-server-jammy'
+    version: 'latest'
+    vmSize: 'Standard_B1s'
+    privateIPAddress: '10.255.1.4'
+  }
+}
+
+module githubActionsRunnerDeployment './modules/virtual-machine.bicep' = {
+  name: 'github-actions-runner-deployment'
+  scope: resourceGroup
+  dependsOn: [
+    dnsResolverDeployment
+  ]
+  params: {
+    location: location
+    subnetResourceId: virtualNetworkDeployment.outputs.vmSubnetResourceId
+    resourceToken: '-gha-${resourceToken}'
+    abbrs: abbrs
+    adminUsername: adminUsername
+    adminPassword: adminPassword
+    customData: githubActionsRunnerCloudInit
+    diskSizeGB: 30
+    osType: 'Linux'
+    sku: '22_04-lts'
+    publisher: 'Canonical'
+    offer: '0001-com-ubuntu-server-jammy'
+    version: 'latest'
+    vmSize: 'Standard_B1s'
+    privateIPAddress: '10.255.1.5'
+  }
+}
 
 module managedIdentityDeployment './modules/managed-identity.bicep' = {
   name: 'managed-identity-deployment'

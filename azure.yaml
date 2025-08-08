@@ -1,4 +1,4 @@
 name: azure-lz-app-inno
-hooks:
-  preprovision:
-    run: ./hooks/preprovision.sh
+# hooks:
+#   preprovision:
+#     run: ./hooks/preprovision.sh

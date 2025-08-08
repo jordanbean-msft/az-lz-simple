@@ -1,0 +1,39 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+    - curl
+    - tar
+    - sudo
+    - git
+    - docker.io
+
+users:
+    - default
+    - name: github
+      shell: /bin/bash
+      sudo: ['ALL=(ALL) NOPASSWD:ALL']
+      groups: docker,sudo
+      homedir: /home/github
+
+write_files:
+    - path: /home/github/register-runner.sh
+      permissions: '0755'
+      content: |
+          #!/bin/bash
+          set -e
+          REPO_URL="<YOUR_GITHUB_REPO_URL>"
+          RUNNER_TOKEN="<YOUR_RUNNER_TOKEN>"
+          RUNNER_VERSION="2.327.1"
+          cd /home/github
+          mkdir -p actions-runner && cd actions-runner
+          curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+          tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+          sudo ./bin/installdependencies.sh
+          ./config.sh --unattended --url "$REPO_URL" --token "$RUNNER_TOKEN" --name $(hostname) --labels self-hosted,linux --work _work
+          sudo ./svc.sh install
+          sudo ./svc.sh start
+
+runcmd:
+  - chown -R github:github /home/github
+  - sudo -u github /home/github/register-runner.sh
