@@ -187,6 +187,7 @@ module virtualNetwork 'br/public:avm/res/network/virtual-network:0.6.1' = {
         name: vmSubnetName
         addressPrefix: vmSubnetAddressPrefix
         networkSecurityGroupResourceId: vmNetworkSecurityGroup.outputs.resourceId
+        defaultOutboundAccess: true
       }
       {
         name: privateEndpointSubnetName

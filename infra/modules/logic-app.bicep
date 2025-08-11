@@ -23,6 +23,21 @@ resource armConnection 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
+resource vmConnection 'Microsoft.Web/connections@2016-06-01' = {
+  name: 'azurevm'
+  location: location
+  properties: {
+    displayName: 'vm-connection'
+    api: {
+      name: 'azurevm'
+      displayName: 'Azure VM'
+      description: 'Azure VM connector allows you to manage virtual machines.'
+      id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/azurevm'
+      type: 'Microsoft.Web/locations/managedApis'
+    }
+  }
+}
+
 resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
   name: '${abbrs.logicWorkflows}central-${location}-${resourceToken}-stop-compute'
   location: location
@@ -65,7 +80,11 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
       }
       actions: {
         'List_resources_by_subscription_-_Container_Apps': {
-          runAfter: {}
+          runAfter: {
+            'Initialize_variables_-_central_resource_group_name': [
+              'Succeeded'
+            ]
+          }
           type: 'ApiConnection'
           inputs: {
             host: {
@@ -110,7 +129,7 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
             }
           }
           runAfter: {
-            'List_resources_by_subscription_-_AKS': [
+            'List_resources_by_subscription_-_VMs': [
               'Succeeded'
             ]
           }
@@ -145,7 +164,7 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
             }
           }
           runAfter: {
-            'List_resources_by_subscription_-_AKS': [
+            'List_resources_by_subscription_-_VMs': [
               'Succeeded'
             ]
           }
@@ -261,8 +280,77 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
             }
           }
           runAfter: {
+            'List_resources_by_subscription_-_VMs': [
+              'Succeeded'
+            ]
+          }
+        }
+        'List_resources_by_subscription_-_VMs': {
+          runAfter: {
             'List_resources_by_subscription_-_AKS': [
               'Succeeded'
+            ]
+          }
+          type: 'ApiConnection'
+          inputs: {
+            host: {
+              connection: {
+                name: '@parameters(\'$connections\')[\'arm\'][\'connectionId\']'
+              }
+            }
+            method: 'get'
+            path: '/subscriptions/@{encodeURIComponent(\'${subscription().subscriptionId}\')}/resources'
+            queries: {
+              'x-ms-api-version': '2016-06-01'
+              '$filter': 'resourceType eq \'Microsoft.Compute/virtualMachines\' and resourceGroup eq \'@{variables(\'central_resource_group_name\')}\''
+            }
+          }
+        }
+        For_each_3: {
+          foreach: '@body(\'List_resources_by_subscription_-_VMs\')?[\'value\']'
+          actions: {
+            'Compose_-_Get_Resource_Group_Name_-_VMs': {
+              type: 'Compose'
+              inputs: '@split(item()?[\'id\'], \'/\')[4]'
+            }
+            Start_virtual_machine: {
+              runAfter: {
+                'Compose_-_Get_Resource_Group_Name_-_VMs': [
+                  'Succeeded'
+                ]
+              }
+              type: 'ApiConnection'
+              inputs: {
+                host: {
+                  connection: {
+                    name: '@parameters(\'$connections\')[\'azurevm\'][\'connectionId\']'
+                  }
+                }
+                method: 'post'
+                path: '/subscriptions/@{encodeURIComponent(\'${subscription().subscriptionId}\')}/resourcegroups/@{encodeURIComponent(outputs(\'Compose_-_Get_Resource_Group_Name_-_VMs\'))}/providers/Microsoft.Compute/virtualMachines/@{encodeURIComponent(item()?[\'name\'])}/start'
+                queries: {
+                  'api-version': '2019-12-01'
+                }
+              }
+            }
+          }
+          runAfter: {
+            'List_resources_by_subscription_-_VMs': [
+              'Succeeded'
+            ]
+          }
+          type: 'Foreach'
+        }
+        'Initialize_variables_-_central_resource_group_name': {
+          runAfter: {}
+          type: 'InitializeVariable'
+          inputs: {
+            variables: [
+              {
+                name: 'central_resource_group_name'
+                type: 'string'
+                value: resourceGroup().name
+              }
             ]
           }
         }
@@ -273,9 +361,20 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
       '$connections': {
         value: {
           arm: {
-            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/eastus2/managedApis/arm'
+            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/arm'
             connectionId: armConnection.id
             connectionName: 'arm'
+            connectionProperties: {
+              authentication: {
+                type: 'ManagedServiceIdentity'
+                identity: managedIdentityId
+              }
+            }
+          }
+          azurevm: {
+            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/azurevm'
+            connectionId: vmConnection.id
+            connectionName: 'azurevm'
             connectionProperties: {
               authentication: {
                 type: 'ManagedServiceIdentity'

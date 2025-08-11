@@ -23,10 +23,26 @@ write_files:
           systemctl disable systemd-resolved
           rm -f /etc/resolv.conf
           echo 'nameserver 127.0.0.1' > /etc/resolv.conf
-          docker run -d --name coredns \
-              -p 53:53/tcp -p 53:53/udp \
-              -v /opt/Corefile:/Corefile \
-              coredns/coredns:1.12.2 -conf /Corefile
+          systemctl daemon-reload
+          systemctl enable --now coredns.service
+
+    - path: /etc/systemd/system/coredns.service
+      permissions: '0644'
+      content: |
+          [Unit]
+          Description=CoreDNS container
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Restart=always
+          ExecStartPre=-/usr/bin/docker rm -f coredns
+          ExecStart=/usr/bin/docker run --name coredns -p 53:53/tcp -p 53:53/udp -v /opt/Corefile:/Corefile coredns/coredns:1.12.2 -conf /Corefile
+          ExecStop=/usr/bin/docker stop coredns
+
+          [Install]
+          WantedBy=multi-user.target
 
 runcmd:
-    - bash /opt/coredns-setup.sh
+        - bash /opt/coredns-setup.sh
+        - systemctl restart coredns.service
