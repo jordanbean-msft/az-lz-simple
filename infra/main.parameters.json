@@ -46,19 +46,25 @@
     "privateEndpointSubnetAddressPrefix": {
       "value": "10.255.2.0/28"
     },
-    "timeZone": {
-      "value": "Central Standard Time"
+    "stopCompute": {
+      "value": {
+        "timeZone": "Central Standard Time",
+        "interval": 1,
+        "frequency": "Day",
+        "scheduleHours": [
+          "19"
+        ]
+      }
     },
-    "interval": {
-      "value": 1
-    },
-    "frequency": {
-      "value": "Day"
-    },
-    "scheduleHours": {
-      "value": [
-        "18"
-      ]
+    "startCentralVMs": {
+      "value": {
+        "timeZone": "Central Standard Time",
+        "interval": 1,
+        "frequency": "Day",
+        "scheduleHours": [
+          "7"
+        ]
+      }
     },
     "dnsResolverImageName": {
       "value": "${AZURE_DNS_RESOLVER_IMAGE_NAME}"

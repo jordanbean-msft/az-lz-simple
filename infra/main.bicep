@@ -23,11 +23,11 @@ param customRoutesAddressPrefixes array
 param privateZonesMappingDataFileType string
 param privateEndpointSubnetName string
 param privateEndpointSubnetAddressPrefix string
-param timeZone string
-param interval int
-param frequency string
-param scheduleHours array
-//param dnsResolverImageName string
+@description('Schedule for stopping compute resources')
+param stopCompute object
+
+@description('Schedule for starting central VMs')
+param startCentralVMs object
 param containerRegistryName string
 param githubRepoUrl string
 @secure()
@@ -178,7 +178,7 @@ module githubActionsRunnerDeployment './modules/virtual-machine.bicep' = {
     publisher: 'Canonical'
     offer: '0001-com-ubuntu-server-jammy'
     version: 'latest'
-    vmSize: 'Standard_B1s'
+    vmSize: 'Standard_B4s_v2'
     privateIPAddress: '10.255.1.5'
   }
 }
@@ -215,15 +215,6 @@ module vpnGatewayDeployment './modules/vpn-gateway.bicep' = {
     logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }
-
-// Removing AMPLS module as it is not used in the current setup
-// module azureMonitorPrivateLinkScope './modules/azure-monitor-private-link-scope.bicep' = {
-//   name: 'azure-monitor-private-link-scope'
-//   scope: resourceGroup
-//   params: {
-//     name: 'ampls-central-${location}-${resourceToken}'
-//   }
-// }
 
 module policiesDeployment './modules/policies.bicep' = {
   name: 'policies-deployment'
@@ -280,18 +271,45 @@ module webPlanContributorAdminRoleAssignmentDeployment './modules/subscription-r
   }
 }
 
-module logicAppDeployment './modules/logic-app.bicep' = {
-  name: 'logic-app-deployment'
+module vmContributorRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'vm-contributor-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: '9980e02c-c2be-4d73-94e8-173b1dc7cf3c'
+  }
+}
+
+// Example usage of stopCompute and startCentralVMs object parameters:
+// You will need to update the logic app module(s) to use these objects as needed.
+
+module stopComputeLogicApp './modules/logic-app-stop-compute.bicep' = {
+  name: 'logic-app-stop-compute'
   scope: resourceGroup
   params: {
     resourceToken: resourceToken
     abbrs: abbrs
     location: location
     managedIdentityId: managedIdentityDeployment.outputs.managedIdentityResourceId
-    timeZone: timeZone
-    interval: interval
-    frequency: frequency
-    scheduleHours: scheduleHours
+    timeZone: stopCompute.timeZone
+    interval: stopCompute.interval
+    frequency: stopCompute.frequency
+    scheduleHours: stopCompute.scheduleHours
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
+  }
+}
+
+module startCentralVMsLogicApp './modules/logic-app-start-central-vms.bicep' = {
+  name: 'logic-app-start-central-vms'
+  scope: resourceGroup
+  params: {
+    resourceToken: resourceToken
+    abbrs: abbrs
+    location: location
+    managedIdentityId: managedIdentityDeployment.outputs.managedIdentityResourceId
+    timeZone: startCentralVMs.timeZone
+    interval: startCentralVMs.interval
+    frequency: startCentralVMs.frequency
+    scheduleHours: startCentralVMs.scheduleHours
     logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }

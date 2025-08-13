@@ -327,7 +327,7 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
                   }
                 }
                 method: 'post'
-                path: '/subscriptions/@{encodeURIComponent(\'${subscription().subscriptionId}\')}/resourcegroups/@{encodeURIComponent(outputs(\'Compose_-_Get_Resource_Group_Name_-_VMs\'))}/providers/Microsoft.Compute/virtualMachines/@{encodeURIComponent(item()?[\'name\'])}/start'
+                path: '/subscriptions/@{encodeURIComponent(\'${subscription().subscriptionId}\')}/resourcegroups/@{encodeURIComponent(outputs(\'Compose_-_Get_Resource_Group_Name_-_VMs\'))}/providers/Microsoft.Compute/virtualMachines/@{encodeURIComponent(item()?[\'name\'])}/stop'
                 queries: {
                   'api-version': '2019-12-01'
                 }
