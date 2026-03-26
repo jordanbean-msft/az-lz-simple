@@ -41,19 +41,20 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:0.17.0' = {
         ]
         nicSuffix: '-nic-01'
         enableAcceleratedNetworking: false
+        deleteOption: 'Delete'
       }
     ]
     osDisk: {
       caching: 'ReadWrite'
       diskSizeGB: diskSizeGB
       managedDisk: {
-        storageAccountType: 'Standard_LRS'
+        storageAccountType: 'StandardSSD_LRS'
       }
+      deleteOption: 'Delete'
     }
     vmSize: vmSize
     customData: customData
     osType: osType
-    encryptionAtHost: false
     bootDiagnostics: true
   }
 }

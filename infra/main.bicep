@@ -28,14 +28,37 @@ param stopCompute object
 
 @description('Schedule for starting central VMs')
 param startCentralVMs object
-param containerRegistryName string
 param githubRepoUrl string
 @secure()
-param githubRunnerToken string
+param githubPat string
 @secure()
 param adminUsername string
 @secure()
 param adminPassword string
+@description('SSH public key for the GitHub Actions runner VM')
+param githubActionsAdminPublicKey string = ''
+
+@description('Configuration for the DNS resolver VM')
+param dnsResolverVm object = {
+  diskSizeGB: 30
+  publisher: 'Canonical'
+  offer: 'ubuntu-24_04-lts'
+  sku: 'server'
+  version: 'latest'
+  vmSize: 'Standard_B2ts_v2'
+  privateIPAddress: '10.255.1.4'
+}
+
+@description('Configuration for the GitHub Actions runner VM')
+param githubActionsRunnerVm object = {
+  publisher: 'canonical'
+  offer: 'ubuntu-24_04-lts'
+  sku: 'server'
+  version: 'latest'
+  vmSize: 'Standard_D8ds_v4'
+  diskSizeGB: 1024
+  privateIPAddress: '10.255.1.5'
+}
 
 var dnsResolverCloudInitTemplate = loadTextContent('cloud-init/dns-resolver.txt')
 var githubActionsRunnerCloudInitTemplate = loadTextContent('cloud-init/github-actions-runner.txt')
@@ -43,8 +66,8 @@ var githubActionsRunnerCloudInitTemplate = loadTextContent('cloud-init/github-ac
 //replace the string "<YOUR_GITHUB_REPO_URL>" with the actual GitHub repo URL
 var githubActionsRunnerCloudInit = replace(
   replace(githubActionsRunnerCloudInitTemplate, '<YOUR_GITHUB_REPO_URL>', githubRepoUrl),
-  '<YOUR_RUNNER_TOKEN>',
-  githubRunnerToken
+  '<YOUR_GITHUB_PAT>',
+  githubPat
 )
 
 var dnsResolverCloudInit = dnsResolverCloudInitTemplate
@@ -52,7 +75,6 @@ var dnsResolverCloudInit = dnsResolverCloudInitTemplate
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
-var tags = { 'azd-env-name': environmentName }
 var privateZonesMappingData = (privateZonesMappingDataFileType == 'commercial')
   ? loadJsonContent('./commercial.private-zones.json')
   : loadJsonContent('./government.private-zones.json')
@@ -96,46 +118,6 @@ module virtualNetworkDeployment './modules/virtual-network.bicep' = {
   }
 }
 
-module acrPullRoleAssignmentDeployment './modules/acr-pull-role-assignment.bicep' = {
-  name: 'acr-pull-role-assignment-deployment'
-  scope: resourceGroup
-  params: {
-    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
-    roleDefinitionId: '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-    containerRegistryName: containerRegistryName
-  }
-}
-
-// module containerInstanceDeployment './modules/container-instance.bicep' = {
-//   name: 'container-instance-deployment'
-//   scope: resourceGroup
-//   params: {
-//     location: location
-//     subnetId: virtualNetworkDeployment.outputs.containerInstanceSubnetResourceId
-//     containerInstanceImage: dnsResolverImageName
-//     managedIdentityResourceId: managedIdentityDeployment.outputs.managedIdentityResourceId
-//     containerRegistryName: containerRegistryName
-//     logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
-//     abbrs: abbrs
-//     resourceToken: resourceToken
-//   }
-//   dependsOn: [
-//     acrPullRoleAssignmentDeployment
-//   ]
-// }
-
-// module dnsPrivateResolver './modules/dns-private-resolver.bicep' = {
-//   name: 'dns-private-resolver'
-//   scope: resourceGroup
-//   params: {
-//     dnsResolverName: 'dnsresolver-central-${location}-${resourceToken}'
-//     location: location
-//     virtualNetworkName: virtualNetwork.outputs.virtualNetworkName
-//     inboundSubnetName: dnsPrivateResolverInboundSubnetName
-//     outboundSubnetName: dnsPrivateResolverOutboundSubnetName
-//   }
-// }
-
 module dnsResolverDeployment './modules/virtual-machine.bicep' = {
   name: 'dns-resolver-deployment'
   scope: resourceGroup
@@ -147,18 +129,18 @@ module dnsResolverDeployment './modules/virtual-machine.bicep' = {
     adminUsername: adminUsername
     adminPassword: adminPassword
     customData: dnsResolverCloudInit
-    diskSizeGB: 30
+    diskSizeGB: dnsResolverVm.diskSizeGB
     osType: 'Linux'
-    sku: '22_04-lts'
-    publisher: 'Canonical'
-    offer: '0001-com-ubuntu-server-jammy'
-    version: 'latest'
-    vmSize: 'Standard_B1s'
-    privateIPAddress: '10.255.1.4'
+    sku: dnsResolverVm.sku
+    publisher: dnsResolverVm.publisher
+    offer: dnsResolverVm.offer
+    version: dnsResolverVm.version
+    vmSize: dnsResolverVm.vmSize
+    privateIPAddress: dnsResolverVm.privateIPAddress
   }
 }
 
-module githubActionsRunnerDeployment './modules/virtual-machine.bicep' = {
+module githubActionsRunnerDeployment './modules/github-actions-runner-vm.bicep' = {
   name: 'github-actions-runner-deployment'
   scope: resourceGroup
   dependsOn: [
@@ -170,16 +152,15 @@ module githubActionsRunnerDeployment './modules/virtual-machine.bicep' = {
     resourceToken: '-gha-${resourceToken}'
     abbrs: abbrs
     adminUsername: adminUsername
-    adminPassword: adminPassword
+    adminPublicKey: githubActionsAdminPublicKey
     customData: githubActionsRunnerCloudInit
-    diskSizeGB: 30
-    osType: 'Linux'
-    sku: '22_04-lts'
-    publisher: 'Canonical'
-    offer: '0001-com-ubuntu-server-jammy'
-    version: 'latest'
-    vmSize: 'Standard_B4s_v2'
-    privateIPAddress: '10.255.1.5'
+    publisher: githubActionsRunnerVm.publisher
+    offer: githubActionsRunnerVm.offer
+    sku: githubActionsRunnerVm.sku
+    version: githubActionsRunnerVm.version
+    vmSize: githubActionsRunnerVm.vmSize
+    diskSizeGB: githubActionsRunnerVm.diskSizeGB
+    privateIPAddress: githubActionsRunnerVm.privateIPAddress
   }
 }
 
@@ -247,19 +228,19 @@ module readerRoleAssignmentDeployment './modules/subscription-role-assignment.bi
   }
 }
 
-module containerAppsOperatorRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
-  name: 'container-apps-operator-role-assignment-deployment'
-  params: {
-    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
-    roleDefinitionId: 'f3bd1b5c-91fa-40e7-afe7-0c11d331232c' // Container Apps Operator
-  }
-}
-
 module aksRbacClusterAdminRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
   name: 'aks-rbac-cluster-admin-role-assignment-deployment'
   params: {
     principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
     roleDefinitionId: 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b' // AKS RBAC Cluster Admin
+  }
+}
+
+module privateDnsZoneContributorRoleAssignmentDeployment './modules/subscription-role-assignment.bicep' = {
+  name: 'private-dns-zone-contributor-role-assignment-deployment'
+  params: {
+    principalId: managedIdentityDeployment.outputs.managedIdentityPrincipalId
+    roleDefinitionId: 'befefa01-2a29-4197-83a8-272ff33ce314' // Private DNS Zone Contributor
   }
 }
 

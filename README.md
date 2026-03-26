@@ -104,4 +104,28 @@ Section    : Answer
 IP4Address : 10.0.0.5
 ```
 
-## Links
+## Deploy GitHub Actions Self-Hosted Runner (Optional)
+
+To deploy a GitHub Actions self-hosted runner as an Azure Container Apps Job within your landing zone:
+
+1. See [GITHUB_ACTIONS_RUNNER_DEPLOYMENT.md](./GITHUB_ACTIONS_RUNNER_DEPLOYMENT.md) for detailed instructions
+2. The runner is deployed via Bicep modules and orchestrated by Azure Developer CLI
+3. Features:
+   - **Event-driven scaling** based on GitHub workflow queue depth
+   - **Private network isolation** - runs within your VNet
+   - **Ephemeral runner** - removes itself after each job
+   - **IAC-based** deployment using Bicep and AZD
+
+Quick start (after base infrastructure is deployed):
+```shell
+# Set GitHub Actions configuration
+azd env set AZURE_GITHUB_PAT "<your-fine-grained-pat>"
+azd env set AZURE_GITHUB_REPO_OWNER "<org-or-username>"
+azd env set AZURE_GITHUB_REPO_NAME "<repository-name>"
+azd env set AZURE_ACR_REGISTRY_NAME "<acr-name>"
+azd env set AZURE_DEPLOY_GITHUB_ACTIONS_RUNNER "true"
+
+# Deploy
+azd up
+```
+

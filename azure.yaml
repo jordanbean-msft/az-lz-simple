@@ -1,4 +1,11 @@
 name: azure-lz-app-inno
-# hooks:
-#   preprovision:
-#     run: ./hooks/preprovision.sh
+metadata:
+  template_version: 1.0.0
+  description: Azure Landing Zone deployment with GitHub Actions VM runner
+  author: jordanbean-msft
+
+infra:
+  provider: bicep
+  path: infra
+
+hooks: {}
