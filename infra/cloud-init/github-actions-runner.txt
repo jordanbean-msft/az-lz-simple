@@ -7,6 +7,9 @@ packages:
     - sudo
     - git
     - docker.io
+    - jq
+    - python3
+    - openssh-client
 
 users:
     - default
@@ -18,22 +21,53 @@ users:
 
 write_files:
     - path: /home/github/register-runner.sh
-      permissions: '0755'
+      owner: github:github
+      permissions: '0700'
       content: |
           #!/bin/bash
-          set -e
+          set -euo pipefail
           REPO_URL="<YOUR_GITHUB_REPO_URL>"
-          RUNNER_TOKEN="<YOUR_RUNNER_TOKEN>"
-          RUNNER_VERSION="2.327.1"
+          GITHUB_PAT="<YOUR_GITHUB_PAT>"
+          RUNNER_VERSION="2.332.0"
+
+          # Parse owner/repo from https://github.com/owner/repo
+          REPO_PATH=$(echo "$REPO_URL" | sed 's|https://github.com/||' | sed 's|\.git$||')
+
+          # Obtain a fresh registration token via the GitHub API (avoids static token expiry)
+          RUNNER_TOKEN=$(curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_PAT}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO_PATH}/actions/runners/registration-token" \
+            | jq -r '.token')
+
+          if [[ -z "$RUNNER_TOKEN" || "$RUNNER_TOKEN" == "null" ]]; then
+            echo "ERROR: Failed to obtain runner registration token. Verify GITHUB_PAT has repo:Administration (write) permission."
+            exit 1
+          fi
+
           cd /home/github
           mkdir -p actions-runner && cd actions-runner
-          curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+          curl -fsSLo actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+            https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
           tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
-          sudo ./bin/installdependencies.sh
-          ./config.sh --unattended --url "$REPO_URL" --token "$RUNNER_TOKEN" --name $(hostname) --labels self-hosted,linux --work _work
-          sudo ./svc.sh install
+          ./bin/installdependencies.sh
+          ./config.sh --unattended \
+            --url "$REPO_URL" \
+            --token "$RUNNER_TOKEN" \
+            --name "$(hostname)" \
+            --labels "self-hosted,Linux,X64" \
+            --work _work
+          sudo ./svc.sh install github
           sudo ./svc.sh start
 
+          # Reduce credential exposure after successful registration.
+          rm -f actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+          unset RUNNER_TOKEN
+          unset GITHUB_PAT
+          rm -f /home/github/register-runner.sh
+
 runcmd:
+  - systemctl enable --now docker
   - chown -R github:github /home/github
   - sudo -u github /home/github/register-runner.sh

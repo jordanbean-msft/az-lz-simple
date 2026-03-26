@@ -130,6 +130,19 @@ module vmNetworkSecurityGroup 'br/public:avm/res/network/network-security-group:
         }
       }
       {
+        name: 'AllowHttpsOutboundToPeeredVnets'
+        properties: {
+          access: 'Allow'
+          direction: 'Outbound'
+          priority: 105
+          protocol: '*'
+          sourceAddressPrefix: vmSubnetAddressPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: '10.0.0.0/8'
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
         name: 'AllowHttpsOutbound'
         properties: {
           access: 'Allow'

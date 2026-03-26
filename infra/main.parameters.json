@@ -12,9 +12,7 @@
       "value": "${AZURE_RESOURCE_GROUP_NAME}"
     },
     "virtualNetworkAddressSpace": {
-      "value": [
-        "10.255.0.0/16"
-      ]
+      "value": ["10.255.0.0/16"]
     },
     "gatewaySubnetName": {
       "value": "GatewaySubnet"
@@ -35,10 +33,7 @@
       "value": "41b23e61-6c1e-4545-b367-cd054e0ed4b4"
     },
     "customRoutesAddressPrefixes": {
-      "value": [
-        "10.0.0.0/8",
-        "172.16.0.0/12"
-      ]
+      "value": ["10.0.0.0/8", "172.16.0.0/12"]
     },
     "privateEndpointSubnetName": {
       "value": "private-endpoint"
@@ -51,9 +46,7 @@
         "timeZone": "Central Standard Time",
         "interval": 1,
         "frequency": "Day",
-        "scheduleHours": [
-          "19"
-        ]
+        "scheduleHours": ["19"]
       }
     },
     "startCentralVMs": {
@@ -61,28 +54,48 @@
         "timeZone": "Central Standard Time",
         "interval": 1,
         "frequency": "Day",
-        "scheduleHours": [
-          "7"
-        ]
+        "scheduleHours": ["7"]
       }
     },
     "dnsResolverImageName": {
       "value": "${AZURE_DNS_RESOLVER_IMAGE_NAME}"
     },
-    "containerRegistryName": {
-      "value": "${AZURE_CONTAINER_REGISTRY_NAME}"
-    },
     "githubRepoUrl": {
       "value": "${AZURE_GITHUB_REPO_URL}"
     },
-    "githubRunnerToken": {
-      "value": "${AZURE_GITHUB_RUNNER_TOKEN}"
+    "githubPat": {
+      "value": "${AZURE_GITHUB_PAT}"
+    },
+    "githubActionsAdminPublicKey": {
+      "value": "${AZURE_GITHUB_ACTIONS_ADMIN_PUBLIC_KEY}"
     },
     "adminUsername": {
       "value": "${AZURE_ADMIN_USERNAME}"
     },
     "adminPassword": {
       "value": "${AZURE_ADMIN_PASSWORD}"
+    },
+    "dnsResolverVm": {
+      "value": {
+        "diskSizeGB": 30,
+        "publisher": "Canonical",
+        "offer": "ubuntu-24_04-lts",
+        "sku": "server",
+        "version": "latest",
+        "vmSize": "Standard_B2ts_v2",
+        "privateIPAddress": "10.255.1.4"
+      }
+    },
+    "githubActionsRunnerVm": {
+      "value": {
+        "publisher": "canonical",
+        "offer": "ubuntu-24_04-lts",
+        "sku": "server",
+        "version": "latest",
+        "vmSize": "Standard_D8ds_v4",
+        "diskSizeGB": 1024,
+        "privateIPAddress": "10.255.1.5"
+      }
     }
   }
 }
