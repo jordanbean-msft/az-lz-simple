@@ -11,21 +11,14 @@ packages:
     - python3
     - openssh-client
 
-users:
-    - default
-    - name: github
-      shell: /bin/bash
-      sudo: ['ALL=(ALL) NOPASSWD:ALL']
-      groups: docker,sudo
-      homedir: /home/github
-
 write_files:
-    - path: /home/github/register-runner.sh
-      owner: github:github
+    - path: /root/register-runner.sh
+      owner: root:root
       permissions: '0700'
       content: |
           #!/bin/bash
           set -euo pipefail
+          export RUNNER_ALLOW_RUNASROOT=1
           REPO_URL="<YOUR_GITHUB_REPO_URL>"
           GITHUB_PAT="<YOUR_GITHUB_PAT>"
           RUNNER_VERSION="2.332.0"
@@ -46,8 +39,7 @@ write_files:
             exit 1
           fi
 
-          cd /home/github
-          mkdir -p actions-runner && cd actions-runner
+          mkdir -p /root/actions-runner && cd /root/actions-runner
           curl -fsSLo actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
             https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
           tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
@@ -58,16 +50,24 @@ write_files:
             --name "$(hostname)" \
             --labels "self-hosted,Linux,X64" \
             --work _work
-          sudo ./svc.sh install github
-          sudo ./svc.sh start
+
+          # Install and start the systemd service as root.
+          ./svc.sh install root
+
+          # Inject RUNNER_ALLOW_RUNASROOT into the generated service unit so the
+          # runner binary starts correctly on every boot.
+          SERVICE_FILE=$(cat .service)
+          sed -i '/\[Service\]/a Environment=RUNNER_ALLOW_RUNASROOT=1' "/etc/systemd/system/${SERVICE_FILE}"
+          systemctl daemon-reload
+
+          ./svc.sh start
 
           # Reduce credential exposure after successful registration.
           rm -f actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
           unset RUNNER_TOKEN
           unset GITHUB_PAT
-          rm -f /home/github/register-runner.sh
+          rm -f /root/register-runner.sh
 
 runcmd:
   - systemctl enable --now docker
-  - chown -R github:github /home/github
-  - sudo -u github /home/github/register-runner.sh
+  - /root/register-runner.sh
