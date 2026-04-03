@@ -143,6 +143,7 @@ Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-confi
 ### Diagnostic scripts
 | Script | VS Code Task | What it checks |
 |--------|-------------|----------------|
+| `trace-resource.sh` | Debug: Trace resource networking | Full chain from resource ID: PE → NIC/IP → VNet → peering → NSG → DNS → TCP. Use when you have a resource ID |
 | `diagnose-all.sh` | Debug: Run all diagnostics | Runs all checks in sequence. Use `--all` to scan all spoke RGs for PEs |
 | `check-vpn.sh` | Debug: Check VPN connection | VPN routes, hub reachability, gateway health, Windows VPN adapter |
 | `check-dns.sh` | Debug: Check DNS resolution | DNS server reachability, resolution of hostnames, privatelink CNAME chain |
@@ -151,6 +152,7 @@ Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-confi
 | `check-private-dns-zones.sh` | Debug: Check private DNS zones | Zone existence, VNet links, A records, Azure Policy assignments |
 | `check-private-endpoints.sh` | Debug: Check private endpoints | PE connection status, DNS zone groups, NIC IPs, DNS cross-check. Use `--all` for all RGs, `--hostname` to find by FQDN |
 | `check-dns-policy.sh` | Debug: Check DNS DINE policy | Verify DINE policies created DNS zone groups on PEs. Use `--remediate` to trigger Azure Policy remediation |
+| `check-nsg.sh` | Debug: Check NSG rules | NSG rules on hub/spoke subnets, effective rules per NIC, orphaned NSGs, unprotected subnets. Use `--all` for all RGs, `--nic` for effective rules |
 | `manage-vm.sh` | VM: DNS/GHA tasks | Start, stop, restart, or check status of DNS server and GHA runner VMs |
 
 ### Common failure scenarios and resolution
@@ -161,6 +163,7 @@ Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-confi
 5. **Cannot reach spoke resources from another spoke**: Spokes not mesh-peered → `check-peerings.sh`, create direct spoke-to-spoke peering
 6. **Private endpoint created but not resolving**: DINE policy hasn't created DNS zone group yet → `check-dns-policy.sh --all --remediate`
 7. **New resource deployed but A record missing**: DINE policy needs time (15-30 min) or remediation → `check-dns-policy.sh --remediate`
+8. **TCP connection fails despite correct DNS**: NSG on PE subnet or spoke subnet blocking traffic → `check-nsg.sh --all`, check effective rules with `check-nsg.sh --nic`
 
 ## Custom Copilot Agents
 

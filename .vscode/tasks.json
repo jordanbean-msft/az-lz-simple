@@ -58,6 +58,11 @@
       "description": "Resource group to check for private endpoints (leave blank for hub RG)",
       "type": "promptString",
       "default": ""
+    },
+    {
+      "id": "azureResourceId",
+      "description": "Azure resource ID (e.g. /subscriptions/.../providers/Microsoft.Web/sites/myapp)",
+      "type": "promptString"
     }
   ],
   "tasks": [
@@ -205,6 +210,14 @@
       "problemMatcher": []
     },
     {
+      "label": "Debug: Trace resource networking",
+      "type": "shell",
+      "command": "./scripts/debug/trace-resource.sh '${input:azureResourceId}'",
+      "group": "test",
+      "detail": "Trace full networking chain for an Azure resource: PE, VNet, peering, DNS, connectivity",
+      "problemMatcher": []
+    },
+    {
       "label": "Debug: Check DNS resolution",
       "type": "shell",
       "command": "./scripts/debug/check-dns.sh '${input:dnsHostname}'",
@@ -282,6 +295,22 @@
       "command": "./scripts/debug/check-dns-policy.sh --all --remediate",
       "group": "none",
       "detail": "Trigger Azure Policy remediation for missing DNS zone groups",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check NSG rules",
+      "type": "shell",
+      "command": "./scripts/debug/check-nsg.sh",
+      "group": "test",
+      "detail": "Check NSG rules on hub subnets for misconfigurations",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check NSG rules (all RGs)",
+      "type": "shell",
+      "command": "./scripts/debug/check-nsg.sh --all",
+      "group": "test",
+      "detail": "Check NSG rules across hub and all spoke resource groups",
       "problemMatcher": []
     },
     {

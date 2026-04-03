@@ -34,7 +34,7 @@ Fall back to `az` CLI (via the debug scripts or direct commands) when:
 
 You are running commands from **Bash inside WSL2** on the user's local **Windows 11** machine. This is important because:
 
-- **All shell commands you execute run in the WSL2 Linux environment** (Ubuntu). Tools like `nslookup`, `dig`, `nc`, `ping`, `ip route`, `traceroute`, `curl`, `az`, and `jq` all run here.
+- **All shell commands you execute run in the WSL2 Linux environment** (Ubuntu). Tools like `nslookup`, `dig`, `nc`, `ip route`, `curl`, `az`, and `jq` all run here. **Note:** `ping` and `traceroute` are available but mostly useless in Azure — see "Azure Networking Behavior" section below.
 - **The VPN connection is on the Windows host**, not inside WSL2. WSL2 accesses the VPN tunnel through the Windows networking stack. This means:
   - VPN adapter status, DNS client config, and route tables on the Windows side may differ from what WSL2 sees.
   - WSL2's `/etc/resolv.conf` is typically auto-generated and may not reflect VPN DNS settings.
@@ -51,6 +51,88 @@ You are running commands from **Bash inside WSL2** on the user's local **Windows
 - `ip route` in WSL2 may not show VPN routes — they live on the Windows host. Don't conclude "VPN is down" from WSL2 routes alone; always cross-check with `powershell.exe -NoProfile -Command "Get-NetRoute | Where-Object { $_.DestinationPrefix -like '10.*' }"`.
 - DNS in WSL2 often goes through a NAT'd virtual adapter. If `nslookup` fails in WSL2 but `powershell.exe -NoProfile -Command "Resolve-DnsName <hostname>"` works on Windows, the issue is WSL2 DNS forwarding, not the VPN or Azure DNS.
 - When the VPN reconnects, Windows may update its DNS but WSL2's `/etc/resolv.conf` stays stale. Restarting WSL (`wsl --shutdown` from Windows) can fix this.
+
+## Azure Networking Behavior — Critical Gotchas
+
+Understanding these Azure-specific behaviors is essential to avoid misdiagnosing problems. Many traditional networking tools behave differently (or not at all) in Azure.
+
+### ICMP Ping Does Not Work for Most Azure Resources
+
+| Resource type | Responds to ICMP ping? | What to use instead |
+|---------------|----------------------|---------------------|
+| **PaaS services** (Storage, SQL, Key Vault, App Service, etc.) | ❌ No — never | `nc -z -w 5 <host> <port>` or `curl -sI https://<host>` |
+| **Private Endpoints** | ❌ No — only forwards the target service's protocol (TCP) | `nc -z -w 5 <private-ip> <port>` (see Service Reference for ports) |
+| **VMs** | ⚠️ Only if NSG explicitly allows ICMP inbound (blocked by default) | `nc -z -w 5 <ip> 22` (SSH) or the application port |
+| **VPN Gateway** | ⚠️ Sometimes (limited to tunnel diagnostics) | `./scripts/debug/check-vpn.sh` or gateway health metrics |
+| **Load Balancers** | ⚠️ Only if LB rule uses protocol "All" AND NSG allows ICMP | Health probe status or `nc` to backend port |
+
+**Bottom line:** Never use `ping` to test Azure connectivity. A failed ping does NOT mean the resource is unreachable — it almost certainly just means ICMP is blocked (which is normal). Always use `nc -z` (TCP port check), `curl`, or the service-specific protocol instead.
+
+### Traceroute Is Unreliable in Azure
+
+Traditional `traceroute` / `tracert` does not show internal Azure hops. Azure's SDN fabric abstracts the network path, so you'll typically see either a direct hop to the target or stars (`* * *`) for intermediate hops. This is normal and does not indicate a problem.
+
+**What to use instead:**
+- For routing issues, check **effective routes** on the VM NIC (see below)
+- Use `./scripts/debug/check-peerings.sh` to verify peering path
+- Use `./scripts/debug/check-vpn.sh` to verify VPN tunnel path
+
+### Effective Routes vs Configured Routes
+
+Azure VMs see a merged set of **effective routes** that includes default system routes, your custom UDRs, BGP-learned routes from VPN gateways, and automatically injected /32 routes for Private Endpoints. The effective routes can differ significantly from what you configured.
+
+**Always check effective routes, not just your route tables:**
+```bash
+# Check effective routes on a VM's NIC
+az network nic show-effective-route-table -g <rg> -n <nic-name> --subscription "$SUB" -o table
+```
+
+### Private Endpoint /32 Route Bypass
+
+When a Private Endpoint is created, Azure automatically injects a /32 route to the PE's private IP into all VNets that are peered (directly or transitively) to the PE's VNet. This /32 route is **more specific** than any default route (e.g., `0.0.0.0/0 → Firewall`), meaning PE traffic bypasses NVAs/firewalls by default.
+
+**Implications for this architecture:**
+- Traffic from VPN clients to PEs goes hub VNet → PE directly (bypassing any NVA if present)
+- If you add a firewall later, PE traffic will still bypass it unless you enable **Private Endpoint network policies** on the PE subnet
+
+### DNS Tool Selection: `nslookup` / `dig` vs `Resolve-DnsName`
+
+This is critical in this architecture because the VPN runs on Windows but commands execute in WSL2. The DNS tools behave very differently:
+
+| Tool | Runs in | Uses Windows DNS resolver? | Honors NRPT / VPN DNS policies? | Honors DNS cache? | Honors hosts file? |
+|------|---------|---------------------------|--------------------------------|-------------------|-------------------|
+| `nslookup` (WSL2) | WSL2 Linux | ❌ No — queries DNS server directly | ❌ No | ❌ No | ❌ No |
+| `dig` (WSL2) | WSL2 Linux | ❌ No — queries DNS server directly | ❌ No | ❌ No | ❌ No |
+| `Resolve-DnsName` (PowerShell) | Windows host | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+
+**When to use each:**
+
+- **Use `Resolve-DnsName` to see what Windows apps actually see.** This is the ground truth for whether a user's browser, Azure Data Studio, or other Windows application can resolve a hostname. Run from WSL2 with:
+  ```bash
+  powershell.exe -NoProfile -Command "Resolve-DnsName <hostname> | Format-List"
+  ```
+
+- **Use `nslookup <hostname> <dns-server-ip>` to test a specific DNS server directly.** This is useful for verifying that the CoreDNS resolver VM is working, or that Azure DNS (168.63.129.16) returns the correct record. It bypasses all local configuration.
+
+- **Use `dig` when you need to inspect the full DNS response** (CNAME chain, TTL, authoritative section). Particularly useful for verifying the `privatelink` CNAME chain:
+  ```bash
+  dig <hostname> +short    # Quick answer
+  dig <hostname> +trace    # Full delegation chain
+  ```
+
+**Key diagnostic pattern — always compare both sides:**
+When troubleshooting private endpoint DNS, run both and compare:
+```bash
+# What does the Windows DNS resolver see? (what apps use)
+powershell.exe -NoProfile -Command "Resolve-DnsName myapp.azurewebsites.net | Format-List"
+
+# What does the CoreDNS server return directly? (bypasses Windows resolver)
+nslookup myapp.azurewebsites.net <dns-server-ip>
+```
+
+If `Resolve-DnsName` returns a **public IP** but `nslookup <host> <dns-server-ip>` returns a **private IP**, the Windows DNS resolver is not using the VPN's DNS server — check the VPN XML profile's `<dnsservers>` section and the NRPT rules.
+
+If `nslookup <host> <dns-server-ip>` returns a **public IP**, the problem is upstream: the private DNS zone is missing, not linked, or has no A record.
 
 ## Configuration
 
@@ -74,6 +156,7 @@ Use these scripts as your primary tools. They produce structured output with ✅
 
 | Script | What it does |
 |--------|-------------|
+| `./scripts/debug/trace-resource.sh <resource-id>` | **Start here when user provides a resource ID.** Traces full chain: resource → FQDN → PE → NIC/IP → VNet → peering → NSG → DNS → TCP |
 | `./scripts/debug/diagnose-all.sh [hostname]` | Runs ALL checks in sequence — use this first for broad diagnosis |
 | `./scripts/debug/diagnose-all.sh --all [hostname]` | Same as above but also scans all spoke RGs for private endpoints |
 | `./scripts/debug/check-vpn.sh` | Checks VPN routes, hub reachability, gateway health, Windows VPN adapter status via PowerShell |
@@ -98,6 +181,9 @@ Use these scripts as your primary tools. They produce structured output with ✅
 | `./scripts/debug/check-dns-policy.sh` | Check DINE policy compliance — are DNS zone groups being created on PEs? |
 | `./scripts/debug/check-dns-policy.sh --all` | Same but scans hub + all spoke RGs |
 | `./scripts/debug/check-dns-policy.sh --remediate` | Trigger Azure Policy remediation for PEs missing DNS zone groups |
+| `./scripts/debug/check-nsg.sh` | Check NSG rules on hub subnets for common misconfigurations (DNS, HTTPS, VPN traffic) |
+| `./scripts/debug/check-nsg.sh --all` | Check NSGs across hub + all spoke resource groups |
+| `./scripts/debug/check-nsg.sh --nic <name> --resource-group <rg>` | Show effective (merged) security rules for a specific NIC |
 
 ## VM Management
 
@@ -125,8 +211,23 @@ Ask the user WHAT they're trying to reach and WHAT error they see:
 - "Connection refused" → service not running, wrong port, or PE not approved
 - "Resolves to wrong/public IP" → private DNS zone missing or not linked
 
-### Step 2: Run broad diagnostics first
+**If the user provides an Azure resource ID** (e.g., `/subscriptions/.../providers/Microsoft.Web/sites/myapp`), skip to Step 2b — the trace script will check the full chain automatically.
+
+### Step 2: Run diagnostics
+
+**Step 2a: Broad diagnostics** — when the user describes a general symptom or provides a hostname:
 Run `./scripts/debug/diagnose-all.sh <hostname>` if they have a specific hostname, or `./scripts/debug/diagnose-all.sh --all` to also scan spoke RGs for private endpoints.
+
+**Step 2b: Resource trace** — when the user provides an Azure resource ID:
+Run `./scripts/debug/trace-resource.sh <resource-id>` to trace the full networking chain in one shot. This:
+1. Looks up the resource and determines its FQDN
+2. Finds all private endpoints targeting it (across hub + spoke RGs)
+3. Gets each PE's private IP, VNet, and subnet
+4. Checks VNet peering to hub (with gateway transit flags)
+5. Checks NSG on the PE subnet
+6. Checks the DNS zone group (DINE policy)
+7. Tests DNS resolution via both CoreDNS and Windows Resolve-DnsName
+8. Tests TCP connectivity on the service-appropriate port
 
 ### Step 3: Drill into the specific failure
 
@@ -172,10 +273,19 @@ Work through each link:
    - Spoke→hub must have `useRemoteGateways=true`
    - Both must be in "Connected" state
 
-6. **TCP port reachable?** `nc -z -w 5 <private-ip> <port>` — use the port from the Service Reference table.
-   - If DNS resolves correctly but TCP fails: check NSG on the PE subnet
+6. **TCP port reachable?** `nc -z -w 5 <private-ip> <port>` — use the port from the Service Reference table. **Do NOT use `ping`** — Private Endpoints and PaaS services do not respond to ICMP (see Azure Networking Behavior section).
+   - If DNS resolves correctly but TCP fails: check NSGs with `./scripts/debug/check-nsg.sh --all`
+   - For detailed analysis, get effective rules on the PE's NIC: `./scripts/debug/check-nsg.sh --nic <pe-nic-name> --resource-group <rg>`
 
-7. **Resource configured for private access?** Many Azure services have a `public-network-access` setting. Check:
+7. **NSG blocking traffic?** Run `./scripts/debug/check-nsg.sh --all` to audit all NSGs.
+   - NSGs are evaluated at both subnet-level AND NIC-level — traffic must be allowed by both
+   - Remember: Azure evaluates inbound rules as subnet NSG first, then NIC NSG
+   - Check effective (merged) rules on a specific NIC for the ground truth:
+     ```bash
+     az network nic list-effective-nsg --name <nic-name> -g <rg> --subscription "$SUB" -o json
+     ```
+
+8. **Resource configured for private access?** Many Azure services have a `public-network-access` setting. Check:
    ```bash
    az resource show --ids <resource-id> --query "properties.publicNetworkAccess" -o tsv
    ```
@@ -211,11 +321,21 @@ If the service isn't in this table, use the `web` tool to search for "Azure priv
 1. Check DNS server VM is running: `./scripts/debug/check-dns-server.sh`
 2. If VM is stopped, start it: `./scripts/debug/check-dns-server.sh --restart`
 3. If VM is running but DNS times out, test CoreDNS directly: `nslookup management.azure.com <dns-ip>`
-4. If the hostname resolves to a PUBLIC IP instead of private:
+4. **Compare Windows vs WSL2 resolution** (see DNS Tool Selection section above):
+   ```bash
+   # What does Windows see? (ground truth for apps)
+   powershell.exe -NoProfile -Command "Resolve-DnsName <hostname> | Format-List"
+   # What does the CoreDNS server return?
+   nslookup <hostname> <dns-ip>
+   ```
+   - If `Resolve-DnsName` returns public IP but `nslookup` via CoreDNS returns private IP → VPN DNS config issue (NRPT or VPN XML `<dnsservers>`)
+   - If both return public IP → private DNS zone missing or not linked
+   - If `Resolve-DnsName` works but WSL2 `nslookup` (without specifying server) fails → WSL2 `/etc/resolv.conf` is stale; restart WSL
+5. If the hostname resolves to a PUBLIC IP instead of private:
    - Check the private DNS zone exists: `./scripts/debug/check-private-dns-zones.sh <zone>` (use Service Reference table for zone name)
    - Check the zone is linked to the hub VNet
    - Check an A record exists in the zone for the resource
-5. If DNS works from the Azure DNS server but not from WSL2:
+6. If DNS works from the Azure DNS server but not from WSL2:
    - The VPN XML config may be missing the `<dnsservers>` entry
    - Guide user: re-download profile from Azure portal, add `<dnsserver><ip></dnsserver>` to the XML, re-import into Azure VPN Client
 
@@ -239,8 +359,19 @@ If the service isn't in this table, use the `web` tool to search for "Azure priv
 2. Check PE connection status (must be "Approved")
 3. Verify DNS resolution points to private IP (not public)
 4. Test TCP connectivity on the correct port: `nc -z -w 5 <private-ip> <port>` (see Service Reference)
-5. If DNS is correct but TCP fails: check NSG rules on the private endpoint subnet
+5. If DNS is correct but TCP fails: run `./scripts/debug/check-nsg.sh --all` and check effective rules on the PE NIC
 6. Check resource's public-network-access setting: `az resource show --ids <id> --query "properties.publicNetworkAccess"`
+
+**If NSG is blocking traffic:**
+1. Run `./scripts/debug/check-nsg.sh --all` for a broad audit
+2. To see the actual merged rules on a NIC: `./scripts/debug/check-nsg.sh --nic <nic-name> --resource-group <rg>`
+3. Common NSG issues in this architecture:
+   - **PE subnet NSG too restrictive**: The hub PE subnet NSG only allows ports 80/443 from VirtualNetwork. If a service uses a non-standard port (e.g., SQL 1433, PostgreSQL 5432, Redis 6380), you must add an inbound allow rule.
+   - **Spoke NSG blocks VPN client traffic**: VPN P2S clients get IPs from the gateway's address pool. If a spoke NSG only allows `VirtualNetwork` service tag, verify the VPN pool is covered. The `VirtualNetwork` tag includes VPN P2S pools, but custom rules using explicit CIDRs might not.
+   - **Outbound DNS blocked**: If an NSG has an explicit deny-all outbound without allowing port 53, resources can't resolve DNS.
+   - **GatewaySubnet has an NSG**: Azure strongly recommends NOT attaching NSGs to the GatewaySubnet — it can break VPN connectivity.
+   - **Subnet NSG vs NIC NSG conflict**: Inbound traffic must pass BOTH the subnet NSG and the NIC NSG. A rule allowed at subnet level can still be denied at NIC level (or vice versa). Use effective rules (`--nic` flag) to see the merged result.
+4. Remember: NSG rules use priorities — lower number = higher priority. A deny at priority 100 blocks traffic even if an allow exists at priority 200.
 
 ### Step 4: Remediate
 After identifying the root cause:
@@ -250,6 +381,7 @@ After identifying the root cause:
 - For missing DNS zone group (DINE policy failure): run `./scripts/debug/check-dns-policy.sh --all --remediate` to trigger policy remediation, or manually create: `az network private-endpoint dns-zone-group create`
 - For VPN XML config: walk user through downloading, editing, and re-importing the profile
 - For PE not Approved: guide user to the resource in Azure portal → Networking → Private endpoint connections → Approve
+- For NSG blocking traffic: provide the exact `az network nsg rule create` command to add an allow rule with the correct priority, direction, protocol, source, and destination
 - For public-network-access blocking private connections: show the `az resource update` command to disable it
 
 ### Step 5: Verify the fix
@@ -259,6 +391,7 @@ After remediation, re-run the specific diagnostic to confirm resolution:
 - `nc -z -w 5 <ip> <port>` for connectivity fixes
 - `./scripts/debug/check-private-endpoints.sh --hostname <fqdn>` to verify the full PE chain
 - `./scripts/debug/check-dns-policy.sh --all` to verify DINE policy compliance after remediation
+- `./scripts/debug/check-nsg.sh --nic <nic-name> --resource-group <rg>` to verify NSG rule changes
 
 ## Azure CLI Patterns
 
@@ -285,6 +418,20 @@ az network private-endpoint list -g <rg> --subscription "$SUB" --query "[].{name
 
 # Check NSG rules on a subnet
 az network nsg rule list --nsg-name <nsg-name> -g <rg> --subscription "$SUB" -o table
+
+# Check effective (merged) security rules on a NIC — the ground truth for what's allowed/denied
+az network nic list-effective-nsg --name <nic-name> -g <rg> --subscription "$SUB" -o json
+
+# List NSGs in a resource group with their subnet/NIC attachments
+az network nsg list -g <rg> --subscription "$SUB" --query "[].{name:name, subnets:subnets[].id, nics:networkInterfaces[].id}" -o table
+
+# Add an NSG rule (example: allow SQL port 1433 inbound from VirtualNetwork)
+az network nsg rule create --nsg-name <nsg-name> -g <rg> --subscription "$SUB" \
+  --name AllowSqlInbound --priority 150 --direction Inbound --access Allow \
+  --protocol Tcp --source-address-prefix VirtualNetwork --destination-port-ranges 1433
+
+# Check effective routes on a VM NIC (shows actual routing including PE /32 routes and BGP)
+az network nic show-effective-route-table -g <rg> -n <nic-name> --subscription "$SUB" -o table
 ```
 
 ## Communication Style

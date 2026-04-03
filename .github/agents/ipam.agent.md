@@ -125,8 +125,22 @@ When a user asks to create a new spoke, follow these steps:
 ### Step 1: Understand requirements
 Ask the user for:
 - **Spoke name** — a short identifier (e.g. "data-platform", "web-app")
-- **Region** — default to the hub's location if not specified
+- **Region** — default to the hub's location if not specified. Cross-region spokes are supported (see notes below).
 - **What workloads will run here?** — this determines subnets. Ask specifically: VMs? AKS? App Service? databases? Do you need a bastion? Application Gateway?
+
+#### Cross-region spoke considerations
+
+Azure supports **global VNet peering** — spokes do NOT have to be in the same region as the hub. The provisioning script handles this automatically via `--location`. However, warn the user about these implications:
+
+| Consideration | Same-region spoke | Cross-region spoke |
+|--------------|-------------------|-------------------|
+| **Data transfer cost** | Lowest (intra-region) | Higher (inter-region egress charges) |
+| **Latency** | Sub-millisecond | Varies by region distance (typically 1-50ms) |
+| **VPN gateway transit** | ✅ Supported | ✅ Supported (Basic SKU excluded) |
+| **DNS resolution** | Fast (hub CoreDNS in same region) | Works but adds cross-region latency to every DNS query |
+| **Private endpoint access** | Resolved via hub DNS → local PE | Resolved via hub DNS → PE may be in another region |
+
+**Recommendation:** Default to the hub's region unless the user has a specific reason for a different region (e.g., data residency, proximity to end users, service availability). If they choose a cross-region spoke, confirm they understand the cost and latency tradeoffs.
 
 ### Step 2: Discover available address space
 Run `./scripts/ipam/discover-address-space.sh` to find unused CIDR blocks. Present the suggestions to the user. Always validate that the suggested range does not overlap with any existing VNet before proceeding.
@@ -144,27 +158,32 @@ This is the most critical step. You MUST follow the rules below.
 6. **The VNet address space CIDR must also be on a proper boundary.** 10.1.0.0/16 is valid. 10.1.5.0/16 is NOT valid.
 7. **VNet address space must not overlap with the hub VNet (10.255.0.0/16)**, the VPN client pool (192.168.2.0/24), or any other spoke.
 
-#### Subnet Sizing by Azure Service (Microsoft Learn best practices)
+#### Subnet Sizing by Azure Service
 
-Use this table when recommending subnet sizes. Always pick the size based on the user's workload description — do NOT default to the minimum when a larger size is the Microsoft recommendation.
+The table below lists **minimum supported** and **production-recommended** sizes for each service. This landing zone is used for **demo/sample workloads**, so **prefer the minimum supported size** to conserve address space unless the user explicitly asks for production scale.
 
-| Azure Service / Workload | Required Subnet Name | Recommended Prefix | Usable IPs | Why this size | Reference |
-|--------------------------|---------------------|--------------------|-----------|--------------|-----------|
-| General compute (VMs) | any name | /24 | 251 | Room for scaling VM count | [VNet planning](https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm) |
-| Private endpoints | any name (often `private-endpoint`) | /27 (small) or /24 (large) | 27 or 251 | Each PE uses 1 IP; /28 too tight if >10 PEs | [PE networking](https://learn.microsoft.com/azure/private-link/private-endpoint-overview) |
-| AKS with Azure CNI Overlay | any name | /24 | 251 | Overlay only needs IPs for nodes, not pods | [AKS CNI Overlay](https://learn.microsoft.com/azure/aks/azure-cni-overlay) |
-| AKS with Azure CNI (pod-level IPs) | any name | /21 or /22 | 2043 or 1019 | Every pod gets a VNet IP; 30 pods/node × 30 nodes = 900 IPs | [AKS networking](https://learn.microsoft.com/azure/aks/concepts-network-ip-address-planning) |
-| AKS API server VNet integration | any name | /28 | 11 | Only needs IPs for API server instances | [API server VNet](https://learn.microsoft.com/azure/aks/api-server-vnet-integration) |
-| Azure Application Gateway v2 | any name | /24 | 251 | Microsoft recommends /24; needs room for autoscale instances | [AppGw sizing](https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure#size-of-the-subnet) |
-| Azure Bastion | **AzureBastionSubnet** (exact name required) | /26 minimum, /24 recommended | 59 or 251 | /26 is the absolute minimum; /24 recommended for host scaling | [Bastion config](https://learn.microsoft.com/azure/bastion/configuration-settings#subnet) |
-| Azure Firewall | **AzureFirewallSubnet** (exact name required) | /26 | 59 | Azure minimum requirement is /26 | [Firewall FAQ](https://learn.microsoft.com/azure/firewall/firewall-faq#why-does-azure-firewall-need-a--26-subnet-size) |
-| Azure Firewall Management | **AzureFirewallManagementSubnet** (exact name) | /26 | 59 | Required for forced tunneling scenarios | [Firewall forced tunnel](https://learn.microsoft.com/azure/firewall/forced-tunneling) |
-| App Service VNet Integration | any name (dedicated, no other resources) | /26 or /24 | 59 or 251 | One IP per App Service plan instance; /26 supports up to ~59 instances | [App Service VNet](https://learn.microsoft.com/azure/app-service/overview-vnet-integration) |
-| Azure Container Apps | any name | /23 | 507 | Microsoft requires minimum /23 for Container Apps environment | [ACA networking](https://learn.microsoft.com/azure/container-apps/networking) |
-| Azure SQL Managed Instance | any name (dedicated) | /27 minimum, /24 recommended | 27 or 251 | Needs IPs for each instance + internal management | [SQL MI networking](https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview) |
-| VPN Gateway | **GatewaySubnet** (exact name required) | /27 | 27 | Microsoft recommends /27; needed only in hub | [Gateway subnet](https://learn.microsoft.com/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings#gwsub) |
-| Azure API Management (internal) | any name (dedicated) | /27 or /24 | 27 or 251 | Developer/Premium SKU needs dedicated subnet | [APIM VNet](https://learn.microsoft.com/azure/api-management/virtual-network-concepts) |
-| Small test/dev (minimal) | any name | /27 | 27 | Smallest practical size for a few VMs or services | — |
+| Azure Service / Workload | Required Subnet Name | Min Supported | Production Rec. | Why | Reference |
+|--------------------------|---------------------|---------------|-----------------|-----|-----------|
+| General compute (VMs) | any name | /29 (3 IPs) | /24 | /29 fits 1-3 VMs for demos | [VNet planning](https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm) |
+| Private endpoints | any name (often `private-endpoint`) | /27 (27 IPs) | /24 | 1 IP per PE; Storage alone can use 5. /27 fits typical demo spokes | [PE networking](https://learn.microsoft.com/azure/private-link/private-endpoint-overview) |
+| AKS with Azure CNI Overlay | any name | /27 (27 IPs) | /24 | Overlay only needs node IPs; /27 fits small clusters | [AKS CNI Overlay](https://learn.microsoft.com/azure/aks/azure-cni-overlay) |
+| AKS with Azure CNI (pod-level IPs) | any name | /24 (251 IPs) | /21 | Every pod gets a VNet IP; /24 is practical minimum | [AKS networking](https://learn.microsoft.com/azure/aks/concepts-network-ip-address-planning) |
+| AKS API Server VNet Integration | any name (delegated to `Microsoft.ContainerService/managedClusters`) | /28 (11 IPs) | /28 | /28 is the Azure minimum and sufficient | [AKS API VNet Integration](https://learn.microsoft.com/azure/aks/api-server-vnet-integration) |
+| Application Gateway v2 | any name (dedicated) | /26 (59 IPs) | /24 | /26 supports ~30 instances; fine for demos | [App Gateway infra](https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure) |
+| Azure Bastion | **AzureBastionSubnet** (exact name required) | /26 (59 IPs) | /24 | /26 is the Azure hard minimum | [Bastion config](https://learn.microsoft.com/azure/bastion/configuration-settings#subnet) |
+| Azure Firewall | **AzureFirewallSubnet** (exact name required) | /26 (59 IPs) | /26 | /26 is the Azure hard minimum | [Firewall FAQ](https://learn.microsoft.com/azure/firewall/firewall-faq#why-does-azure-firewall-need-a--26-subnet-size) |
+| Azure Firewall Management | **AzureFirewallManagementSubnet** (exact name) | /26 (59 IPs) | /26 | Required for forced tunneling | [Firewall forced tunnel](https://learn.microsoft.com/azure/firewall/forced-tunneling) |
+| App Service / Functions VNet Integration | any name (dedicated, delegated to `Microsoft.Web/serverFarms`) | /27 (27 IPs) | /24 | One IP per plan instance; /27 fits small demos | [App Service VNet](https://learn.microsoft.com/azure/app-service/overview-vnet-integration) |
+| Azure Container Apps | any name (delegated to `Microsoft.App/environments`) | /23 (507 IPs) | /23 | /23 is the Azure hard minimum | [ACA networking](https://learn.microsoft.com/azure/container-apps/networking) |
+| Azure AI Foundry Agent Service | any name (delegated to `Microsoft.App/environments`) | /26 (59 IPs) | /24 | Agent containers injected; /26 for demos, /24 for scale | [Foundry Agent networking](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) |
+| Azure Machine Learning / AI Foundry compute | any name (delegated to `Microsoft.MachineLearningServices/workspaces`) | /27 (27 IPs) | /24 | /27 fits a small training cluster | [AML managed VNet](https://learn.microsoft.com/azure/machine-learning/how-to-enable-managed-vnet) |
+| Azure Databricks | Two dedicated subnets (host + container), any names | /26 each (59 IPs) | /24 each | /26 is the Azure minimum per subnet | [Databricks VNet injection](https://learn.microsoft.com/azure/databricks/administration-guide/cloud-configurations/azure/vnet-inject) |
+| Azure Redis Cache (Premium VNet injection) | any name (dedicated) | /27 (27 IPs) | /27 | /27 is the Azure minimum; deprecated in favor of Private Link | [Redis VNet](https://learn.microsoft.com/azure/azure-cache-for-redis/cache-how-to-premium-vnet) |
+| Azure SQL Managed Instance | any name (dedicated) | /27 (27 IPs) | /24 | /27 fits 1-2 instances for demos | [SQL MI networking](https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview) |
+| Azure Route Server | **RouteServerSubnet** (exact name required) | /27 (27 IPs) | /27 | /27 is the Azure hard minimum | [Route Server](https://learn.microsoft.com/azure/route-server/overview) |
+| VPN Gateway | **GatewaySubnet** (exact name required) | /27 (27 IPs) | /27 | /27 is the Microsoft recommendation; hub only | [Gateway subnet](https://learn.microsoft.com/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings#gwsub) |
+| Azure API Management (internal) | any name (dedicated) | /27 (27 IPs) | /24 | /27 fits Developer SKU for demos | [APIM VNet](https://learn.microsoft.com/azure/api-management/virtual-network-concepts) |
+| Small test/dev (minimal) | any name | /29 (3 IPs) | /27 | Smallest Azure allows | — |
 
 #### Named Subnet Rules
 Some Azure services require an exact subnet name. When the user requests these services, you MUST use the correct name:
@@ -174,6 +193,54 @@ Some Azure services require an exact subnet name. When the user requests these s
 - `AzureFirewallManagementSubnet` — Azure Firewall forced tunneling
 - `RouteServerSubnet` — Azure Route Server
 
+#### Subnet Delegation Rules
+Some Azure services require subnet delegation. The delegated subnet must be dedicated — no other resource types allowed:
+- `Microsoft.Web/serverFarms` — App Service and Azure Functions VNet integration
+- `Microsoft.App/environments` — Azure Container Apps and AI Foundry Agent Service
+- `Microsoft.ContainerService/managedClusters` — AKS API Server VNet integration
+- `Microsoft.MachineLearningServices/workspaces` — Azure Machine Learning / AI Foundry compute
+- `Microsoft.Sql/managedInstances` — Azure SQL Managed Instance
+
+#### Private Endpoint Subnet Sizing Guide
+
+Almost every spoke needs a private endpoint (PE) subnet. Each PE consumes **1 IP address** from the subnet. Unlike delegated subnets, a PE subnet is shared — multiple PEs from different services coexist in the same subnet. Size the subnet based on how many PEs the spoke will host.
+
+**Common PaaS services and their PE count per resource:**
+
+| Azure Service | PEs per resource | Subresource(s) |
+|--------------|-----------------|----------------|
+| Storage Account | 1-6 | `blob`, `file`, `queue`, `table`, `dfs`, `web` (1 PE per subresource used) |
+| Azure SQL Database | 1 | `sqlServer` |
+| Azure SQL Managed Instance | 1 | `managedInstance` |
+| Key Vault | 1 | `vault` |
+| Azure AI Foundry / ML workspace | 1 | `amlworkspace` |
+| Azure OpenAI / Cognitive Services | 1 | `account` |
+| AI Search | 1 | `searchService` |
+| Document Intelligence | 1 | `account` |
+| Cosmos DB | 1 per API | `Sql`, `MongoDB`, `Cassandra`, `Gremlin`, `Table` |
+| Container Registry | 1 | `registry` |
+| Event Hub / Service Bus | 1 | `namespace` |
+| App Configuration | 1 | `configurationStores` |
+| Azure Monitor (Private Link Scope) | 1 | `azuremonitor` |
+
+**Typical demo spoke PE counts:**
+
+| Spoke Type | Typical PEs | Example services |
+|-----------|------------|------------------|
+| Simple web app | 3-5 | Storage (blob), SQL, Key Vault, App Config |
+| AI / Foundry agent | 6-10 | Storage (blob), Cosmos DB, Key Vault, AI Search, OpenAI, Document Intelligence, AI Foundry |
+| Data platform | 5-8 | Storage (blob, dfs), SQL MI, Key Vault, Data Factory, Purview |
+| AKS workload | 3-5 | ACR, Key Vault, Storage (blob), SQL or Cosmos DB |
+
+**Sizing recommendation for demos:**
+- **≤5 PEs** → /28 (11 usable IPs) — only if you're certain the count stays small
+- **6-27 PEs** → /27 (27 usable IPs)
+- **28+ PEs** → /26 or larger
+
+**Default: use /27 for demo spokes.** A single Storage Account with blob + file + queue + table + dfs already consumes 5 IPs, and typical Azure architectures pair storage with several other PaaS services (Key Vault, SQL, AI services, etc.), easily reaching 10-15 PEs. A /27 gives comfortable headroom for 27 PEs without over-allocating.
+
+**Important:** PE subnets do NOT require delegation and should NOT be delegated. They can coexist with other non-delegated resources if needed, but best practice is to keep them in a dedicated subnet for clarity.
+
 #### Example Subnet Plans
 
 **Web application spoke** (App Service + SQL + private endpoints):
@@ -181,28 +248,38 @@ Given VNet `10.1.0.0/16`:
 
 | Subnet | CIDR | Usable IPs | Purpose |
 |--------|------|-----------|---------|
-| app-service | 10.1.0.0/24 | 251 | App Service VNet integration |
-| private-endpoint | 10.1.1.0/27 | 27 | Private endpoints for SQL, Storage, etc. |
-| AzureBastionSubnet | 10.1.2.0/26 | 59 | Azure Bastion for VM access |
+| app-service | 10.1.0.0/27 | 27 | App Service VNet integration (min for demos) |
+| private-endpoint | 10.1.0.32/27 | 27 | PEs for Storage, SQL, Key Vault, App Config |
+| AzureBastionSubnet | 10.1.0.64/26 | 59 | Azure Bastion for VM access (hard minimum /26) |
 
 **AKS spoke** (Kubernetes with CNI Overlay + Application Gateway ingress):
 Given VNet `10.2.0.0/16`:
 
 | Subnet | CIDR | Usable IPs | Purpose |
 |--------|------|-----------|---------|
-| aks-nodes | 10.2.0.0/24 | 251 | AKS node pool (CNI Overlay — nodes only) |
-| app-gateway | 10.2.1.0/24 | 251 | Application Gateway v2 for ingress |
-| private-endpoint | 10.2.2.0/27 | 27 | Private endpoints for ACR, Key Vault, etc. |
-| aks-api | 10.2.2.32/28 | 11 | AKS API server VNet integration |
+| aks-nodes | 10.2.0.0/27 | 27 | AKS node pool (CNI Overlay — nodes only) |
+| private-endpoint | 10.2.0.32/27 | 27 | PEs for ACR, Key Vault, Storage, SQL/Cosmos |
+| app-gateway | 10.2.0.64/26 | 59 | Application Gateway v2 (min /26 for demos) |
+| aks-api | 10.2.0.128/28 | 11 | AKS API server VNet integration |
 
 **Data platform spoke** (SQL MI + Data Factory + private endpoints):
 Given VNet `10.3.0.0/16`:
 
 | Subnet | CIDR | Usable IPs | Purpose |
 |--------|------|-----------|---------|
-| sql-mi | 10.3.0.0/24 | 251 | Azure SQL Managed Instance (dedicated) |
-| private-endpoint | 10.3.1.0/24 | 251 | Many private endpoints for data services |
-| compute | 10.3.2.0/24 | 251 | Integration runtime VMs, jump boxes |
+| sql-mi | 10.3.0.0/27 | 27 | Azure SQL Managed Instance (min for demos) |
+| private-endpoint | 10.3.0.32/27 | 27 | PEs for Storage, Key Vault, Data Factory, Purview |
+| compute | 10.3.0.64/29 | 3 | Integration runtime VM, jump box |
+
+**AI / Foundry Agent spoke** (AI Foundry Agent Service + ML compute + private endpoints):
+Given VNet `10.4.0.0/16`:
+
+| Subnet | CIDR | Usable IPs | Purpose |
+|--------|------|-----------|---------|
+| foundry-agent | 10.4.0.0/26 | 59 | AI Foundry Agent Service (delegated to Microsoft.App/environments) |
+| ml-compute | 10.4.0.64/27 | 27 | ML training / managed endpoints (delegated to Microsoft.MachineLearningServices/workspaces) |
+| private-endpoint | 10.4.0.96/27 | 27 | PEs for Cosmos DB, Storage, Key Vault, AI Search, OpenAI, Doc Intelligence |
+| compute | 10.4.0.128/29 | 3 | Jump box |
 
 #### How to Present the Plan
 
