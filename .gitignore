@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Local Azure debug configuration (contains tenant/subscription/resource IDs)
+.azure-debug-config.json
+.azure-debug-config.last-sync
+
 # User-specific files
 *.rsuser
 *.suo

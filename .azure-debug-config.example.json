@@ -1,0 +1,43 @@
+{
+  "description": "Local Azure environment configuration for debug scripts. Copy this to .azure-debug-config.json and fill in your values. DO NOT commit .azure-debug-config.json.",
+  "tenantId": "<your-tenant-id>",
+  "subscriptionId": "<your-subscription-id>",
+  "hub": {
+    "resourceGroupName": "<central-resource-group-name>",
+    "vnetResourceId": "/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.Network/virtualNetworks/<vnet-name>",
+    "vnetName": "<central-vnet-name>",
+    "addressSpace": "<hub-vnet-cidr e.g. 10.255.0.0/16>",
+    "subnets": [
+      { "name": "GatewaySubnet", "addressPrefix": "<e.g. 10.255.0.0/24>" },
+      { "name": "<vm-subnet>", "addressPrefix": "<e.g. 10.255.1.0/24>" }
+    ],
+    "dnsServerVmResourceId": "/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.Compute/virtualMachines/<vm-name>",
+    "dnsServerVmName": "<dns-resolver-vm-name>",
+    "dnsServerPrivateIp": "<dns-server-private-ip>",
+    "vpnGateway": {
+      "name": "<vpn-gateway-name>",
+      "resourceId": "<vpn-gateway-resource-id>",
+      "sku": "<e.g. VpnGw1>",
+      "p2sAddressPool": ["<e.g. 172.16.0.0/24>"]
+    },
+    "ghaRunnerVmName": "<github-actions-runner-vm-name>",
+    "ghaRunnerVmResourceId": "<github-actions-runner-vm-resource-id>",
+    "location": "<azure-region>"
+  },
+  "privateDnsZones": [
+    "<e.g. privatelink.blob.core.windows.net>"
+  ],
+  "local": {
+    "vpnAdapterName": "<e.g. Azure VPN Client Adapter>"
+  },
+  "spokes": [
+    {
+      "name": "<spoke-name>",
+      "resourceGroupName": "<spoke-resource-group-name>",
+      "subscriptionId": "<spoke-subscription-id-if-different>",
+      "vnetResourceId": "/subscriptions/<subscription-id>/resourceGroups/<rg-name>/providers/Microsoft.Network/virtualNetworks/<spoke-vnet-name>",
+      "vnetName": "<spoke-vnet-name>",
+      "addressSpace": "<spoke-vnet-cidr>"
+    }
+  ]
+}

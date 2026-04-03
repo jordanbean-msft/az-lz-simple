@@ -1,0 +1,352 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "spokeName",
+      "description": "Short name for the spoke (e.g. 'my-app', 'data-platform')",
+      "type": "promptString"
+    },
+    {
+      "id": "spokeResourceGroup",
+      "description": "Resource group for the spoke VNet (e.g. 'RG-MY-APP-EASTUS2')",
+      "type": "promptString"
+    },
+    {
+      "id": "spokeLocation",
+      "description": "Azure region (e.g. 'eastus2'). Leave blank to use hub location.",
+      "type": "promptString",
+      "default": ""
+    },
+    {
+      "id": "spokeAddressSpace",
+      "description": "VNet address space CIDR (e.g. '10.1.0.0/16'). Run 'IPAM: Discover address space' first to find available ranges.",
+      "type": "promptString"
+    },
+    {
+      "id": "spokeSubnets",
+      "description": "Comma-separated subnets as name:cidr (e.g. 'default:10.1.0.0/24,private-endpoint:10.1.1.0/28'). Leave blank for no subnets.",
+      "type": "promptString",
+      "default": ""
+    },
+    {
+      "id": "spokeCreateRg",
+      "description": "Create the resource group if it doesn't exist?",
+      "type": "pickString",
+      "options": ["yes", "no"],
+      "default": "yes"
+    },
+    {
+      "id": "spokeRemoveName",
+      "description": "Name of the spoke to remove (as registered in .azure-debug-config.json)",
+      "type": "promptString"
+    },
+    {
+      "id": "spokeRemoveDeleteRg",
+      "description": "Also delete the resource group and all its resources?",
+      "type": "pickString",
+      "options": ["no", "yes"],
+      "default": "no"
+    },
+    {
+      "id": "dnsHostname",
+      "description": "Hostname to test DNS resolution for (e.g. 'myapp.azurewebsites.net'). Leave blank for default checks.",
+      "type": "promptString",
+      "default": ""
+    },
+    {
+      "id": "privateEndpointRg",
+      "description": "Resource group to check for private endpoints (leave blank for hub RG)",
+      "type": "promptString",
+      "default": ""
+    }
+  ],
+  "tasks": [
+    {
+      "label": "azd up",
+      "type": "shell",
+      "command": "azd up",
+      "group": "build",
+      "detail": "Provision and deploy all infrastructure with Azure Developer CLI",
+      "problemMatcher": []
+    },
+    {
+      "label": "azd provision",
+      "type": "shell",
+      "command": "azd provision",
+      "group": "build",
+      "detail": "Provision infrastructure only (no app deployment)",
+      "problemMatcher": []
+    },
+    {
+      "label": "azd down",
+      "type": "shell",
+      "command": "azd down",
+      "group": "build",
+      "detail": "Delete all deployed Azure resources",
+      "problemMatcher": []
+    },
+    {
+      "label": "azd env list",
+      "type": "shell",
+      "command": "azd env list",
+      "group": "none",
+      "detail": "List all Azure Developer CLI environments",
+      "problemMatcher": []
+    },
+    {
+      "label": "Bicep build",
+      "type": "shell",
+      "command": "az bicep build --file infra/main.bicep",
+      "group": "build",
+      "detail": "Compile main.bicep to validate syntax and generate ARM template",
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "Bicep lint",
+      "type": "shell",
+      "command": "az bicep lint --file infra/main.bicep",
+      "group": "test",
+      "detail": "Lint main.bicep for best practice violations",
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "Bicep build (all modules)",
+      "type": "shell",
+      "command": "for f in infra/modules/*.bicep; do echo \"Building $f...\"; az bicep build --file \"$f\" || exit 1; done",
+      "group": "build",
+      "detail": "Compile all Bicep modules to validate syntax",
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "Azure login",
+      "type": "shell",
+      "command": "az login",
+      "group": "none",
+      "detail": "Log in to Azure CLI",
+      "problemMatcher": []
+    },
+    {
+      "label": "Show azd environment values",
+      "type": "shell",
+      "command": "azd env get-values",
+      "group": "none",
+      "detail": "Display all environment variable values for the current azd environment",
+      "problemMatcher": []
+    },
+    {
+      "label": "What-if deployment",
+      "type": "shell",
+      "command": "azd provision --preview",
+      "group": "test",
+      "detail": "Preview infrastructure changes without deploying",
+      "problemMatcher": []
+    },
+    {
+      "label": "IPAM: Sync config with Azure",
+      "type": "shell",
+      "command": "./scripts/ipam/sync-config.sh --yes",
+      "group": "none",
+      "detail": "Reconcile .azure-debug-config.json with live Azure state — removes deleted spokes, adds unregistered peered VNets",
+      "problemMatcher": []
+    },
+    {
+      "label": "IPAM: Discover available address space",
+      "type": "shell",
+      "command": "./scripts/ipam/discover-address-space.sh",
+      "group": "none",
+      "detail": "Query Azure for used address spaces and suggest available CIDR blocks for a new spoke",
+      "problemMatcher": []
+    },
+    {
+      "label": "IPAM: List spoke VNets",
+      "type": "shell",
+      "command": "./scripts/ipam/list-spokes.sh",
+      "group": "none",
+      "detail": "List all spoke VNets peered to the hub and their status",
+      "problemMatcher": []
+    },
+    {
+      "label": "IPAM: Provision new spoke VNet",
+      "type": "shell",
+      "command": "./scripts/ipam/provision-spoke.sh --name '${input:spokeName}' --resource-group '${input:spokeResourceGroup}' --location '${input:spokeLocation}' --address-space '${input:spokeAddressSpace}' --subnets '${input:spokeSubnets}' $([ '${input:spokeCreateRg}' = 'yes' ] && echo '--create-rg')",
+      "group": "none",
+      "detail": "Create a new spoke VNet, peer it to the hub, and configure DNS",
+      "problemMatcher": [],
+      "dependsOn": []
+    },
+    {
+      "label": "IPAM: Provision spoke (dry run)",
+      "type": "shell",
+      "command": "./scripts/ipam/provision-spoke.sh --name '${input:spokeName}' --resource-group '${input:spokeResourceGroup}' --location '${input:spokeLocation}' --address-space '${input:spokeAddressSpace}' --subnets '${input:spokeSubnets}' $([ '${input:spokeCreateRg}' = 'yes' ] && echo '--create-rg') --dry-run",
+      "group": "none",
+      "detail": "Preview spoke VNet provisioning without making any changes",
+      "problemMatcher": []
+    },
+    {
+      "label": "IPAM: Remove spoke VNet",
+      "type": "shell",
+      "command": "./scripts/ipam/remove-spoke.sh --name '${input:spokeRemoveName}' $([ '${input:spokeRemoveDeleteRg}' = 'yes' ] && echo '--delete-rg')",
+      "group": "none",
+      "detail": "Remove a spoke VNet, delete peerings, and optionally delete the resource group",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Run all diagnostics",
+      "type": "shell",
+      "command": "./scripts/debug/diagnose-all.sh '${input:dnsHostname}'",
+      "group": "test",
+      "detail": "Run the full connectivity diagnostic suite (VPN, DNS, peerings, private endpoints)",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check DNS resolution",
+      "type": "shell",
+      "command": "./scripts/debug/check-dns.sh '${input:dnsHostname}'",
+      "group": "test",
+      "detail": "Test DNS resolution through the VPN for a hostname",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check VPN connection",
+      "type": "shell",
+      "command": "./scripts/debug/check-vpn.sh",
+      "group": "test",
+      "detail": "Verify Azure P2S VPN connectivity from WSL2",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check DNS server VM",
+      "type": "shell",
+      "command": "./scripts/debug/check-dns-server.sh",
+      "group": "test",
+      "detail": "Check the DNS resolver VM status and CoreDNS health",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Restart DNS server VM",
+      "type": "shell",
+      "command": "./scripts/debug/check-dns-server.sh --restart",
+      "group": "none",
+      "detail": "Start the DNS resolver VM if it's stopped",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check VNet peerings",
+      "type": "shell",
+      "command": "./scripts/debug/check-peerings.sh",
+      "group": "test",
+      "detail": "Verify VNet peerings between hub and all spokes",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check private DNS zones",
+      "type": "shell",
+      "command": "./scripts/debug/check-private-dns-zones.sh",
+      "group": "test",
+      "detail": "Verify private DNS zones and their VNet links",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check private endpoints",
+      "type": "shell",
+      "command": "./scripts/debug/check-private-endpoints.sh '${input:privateEndpointRg}'",
+      "group": "test",
+      "detail": "Check private endpoints and their connectivity in a resource group",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check private endpoints (all RGs)",
+      "type": "shell",
+      "command": "./scripts/debug/check-private-endpoints.sh --all",
+      "group": "test",
+      "detail": "Scan hub + all spoke RGs for private endpoints",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Check DNS DINE policy compliance",
+      "type": "shell",
+      "command": "./scripts/debug/check-dns-policy.sh --all",
+      "group": "test",
+      "detail": "Verify DINE policies created DNS zone groups on all private endpoints",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug: Remediate DNS DINE policies",
+      "type": "shell",
+      "command": "./scripts/debug/check-dns-policy.sh --all --remediate",
+      "group": "none",
+      "detail": "Trigger Azure Policy remediation for missing DNS zone groups",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: DNS Server — Status",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh status dns",
+      "group": "none",
+      "detail": "Check DNS resolver VM power state",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: DNS Server — Start",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh start dns",
+      "group": "none",
+      "detail": "Start the DNS resolver VM",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: DNS Server — Stop",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh stop dns",
+      "group": "none",
+      "detail": "Deallocate the DNS resolver VM (stops billing)",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: DNS Server — Restart",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh restart dns",
+      "group": "none",
+      "detail": "Restart the DNS resolver VM",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: GHA Runner — Status",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh status gha-runner",
+      "group": "none",
+      "detail": "Check GitHub Actions runner VM power state",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: GHA Runner — Start",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh start gha-runner",
+      "group": "none",
+      "detail": "Start the GitHub Actions runner VM",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: GHA Runner — Stop",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh stop gha-runner",
+      "group": "none",
+      "detail": "Deallocate the GitHub Actions runner VM (stops billing)",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: GHA Runner — Restart",
+      "type": "shell",
+      "command": "./scripts/debug/manage-vm.sh restart gha-runner",
+      "group": "none",
+      "detail": "Restart the GitHub Actions runner VM",
+      "problemMatcher": []
+    }
+  ]
+}

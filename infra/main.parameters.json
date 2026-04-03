@@ -57,9 +57,6 @@
         "scheduleHours": ["7"]
       }
     },
-    "dnsResolverImageName": {
-      "value": "${AZURE_DNS_RESOLVER_IMAGE_NAME}"
-    },
     "githubRepoUrl": {
       "value": "${AZURE_GITHUB_REPO_URL}"
     },

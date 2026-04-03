@@ -1,6 +1,13 @@
 # az-lz-simple
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Azure](https://img.shields.io/badge/Azure-Landing%20Zone-0078D4?logo=microsoftazure)](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/)
+[![Bicep](https://img.shields.io/badge/IaC-Bicep-orange?logo=microsoftazure)](https://learn.microsoft.com/azure/azure-resource-manager/bicep/)
+[![AZD Compatible](https://img.shields.io/badge/azd-compatible-blue?logo=microsoftazure)](https://learn.microsoft.com/azure/developer/azure-developer-cli/)
+
 ![architecture](./.img/architecture.drawio.png)
+
+A simple hub-spoke Azure landing zone deployed with Bicep and Azure Developer CLI. Includes a VPN gateway with Entra ID authentication, a DNS resolver VM running CoreDNS, a GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, scheduled compute start/stop via Logic Apps, and a Storage Account with a private endpoint.
 
 The blog post that reviews this architecture can be found [here](https://jordanbeandev.com/how-to-set-up-a-simple-hub-spoke-network-in-azure/).
 
@@ -12,9 +19,37 @@ The blog post that reviews this architecture can be found [here](https://jordanb
 
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 - Azure subscription & resource group
-- [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd?tabs=winget-windows%2Cbrew-mac%2Cscript-linux&pivots=os-windows)
+- [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd)
 - [Azure VPN Client](https://learn.microsoft.com/en-us/azure/vpn-gateway/point-to-site-entra-vpn-client-windows#download)
-- [Docker](https://docs.docker.com/get-docker/)
+
+## Resources Deployed
+
+| Resource | Description |
+|----------|-------------|
+| Virtual Network | Hub VNet with Gateway, VM, and Private Endpoint subnets |
+| VPN Gateway | Point-to-site VPN with Entra ID (AAD) authentication |
+| DNS Resolver VM | Ubuntu VM running CoreDNS forwarding to Azure DNS (168.63.129.16) |
+| GitHub Actions Runner VM | Ubuntu VM with self-hosted GitHub Actions runner agent |
+| Private DNS Zones | Auto-registered via Azure Policy for private endpoint resolution |
+| Azure Policy | Custom policy definition for automatic private DNS zone creation and VNet linking |
+| Log Analytics Workspace | Central logging for diagnostics |
+| Storage Account | Blob storage with private endpoint (no public access) |
+| Logic Apps | Scheduled start/stop of compute resources (VMs, AKS, Container Apps, Function Apps) |
+| Managed Identity | User-assigned identity for policy remediation and compute management |
+| Role Assignments | Subscription-scoped roles for the managed identity |
+
+## Environment Variables
+
+Set these `azd` environment variables before running `azd up`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AZURE_RESOURCE_GROUP_NAME` | Yes | Name of the pre-created resource group |
+| `AZURE_ADMIN_USERNAME` | Yes | Admin username for VMs |
+| `AZURE_ADMIN_PASSWORD` | Yes | Admin password for the DNS resolver VM |
+| `AZURE_GITHUB_REPO_URL` | Yes | GitHub repo URL for the Actions runner (e.g. `https://github.com/org/repo`) |
+| `AZURE_GITHUB_PAT` | Yes | Fine-grained GitHub PAT with runner registration permissions |
+| `AZURE_GITHUB_ACTIONS_ADMIN_PUBLIC_KEY` | Yes | SSH public key for the GitHub Actions runner VM |
 
 ## Deployment
 
@@ -38,11 +73,7 @@ azd up
 
 ### Update DNS resolution through Azure VPN client
 
-1. Get inbound IP address of DNS server (running in Container Instance).
-
-```shell
-az container show --resource-group <resource-group-name> --name <container-instance-name> --query "ipAddress.ip" -o tsv
-```
+1. Get the private IP address of the DNS resolver VM (configured via `dnsResolverVm.privateIPAddress` in `main.parameters.json`).
 
 1. [Download](https://learn.microsoft.com/en-us/azure/vpn-gateway/point-to-site-entra-gateway#download) VPN client profile configuration package.
 
@@ -104,28 +135,70 @@ Section    : Answer
 IP4Address : 10.0.0.5
 ```
 
-## Deploy GitHub Actions Self-Hosted Runner (Optional)
+## GitHub Actions Self-Hosted Runner
 
-To deploy a GitHub Actions self-hosted runner as an Azure Container Apps Job within your landing zone:
+The deployment includes a GitHub Actions self-hosted runner VM within the hub VNet. The runner is provisioned as an Ubuntu VM with the GitHub Actions runner agent installed via cloud-init and registered as a systemd service.
 
-1. See [GITHUB_ACTIONS_RUNNER_DEPLOYMENT.md](./GITHUB_ACTIONS_RUNNER_DEPLOYMENT.md) for detailed instructions
-2. The runner is deployed via Bicep modules and orchestrated by Azure Developer CLI
-3. Features:
-   - **Event-driven scaling** based on GitHub workflow queue depth
-   - **Private network isolation** - runs within your VNet
-   - **Ephemeral runner** - removes itself after each job
-   - **IAC-based** deployment using Bicep and AZD
+Features:
+- **Private network isolation** — runs within the hub VNet on the VM subnet
+- **Persistent runner** — runs as a systemd service that auto-restarts
+- **Pre-installed tooling** — Docker, Python 3, Git, curl, jq, openssh-client
 
-Quick start (after base infrastructure is deployed):
+The runner is configured via the following `azd` environment variables (set before running `azd up`):
+
 ```shell
-# Set GitHub Actions configuration
+azd env set AZURE_GITHUB_REPO_URL "https://github.com/<org-or-username>/<repository-name>"
 azd env set AZURE_GITHUB_PAT "<your-fine-grained-pat>"
-azd env set AZURE_GITHUB_REPO_OWNER "<org-or-username>"
-azd env set AZURE_GITHUB_REPO_NAME "<repository-name>"
-azd env set AZURE_ACR_REGISTRY_NAME "<acr-name>"
-azd env set AZURE_DEPLOY_GITHUB_ACTIONS_RUNNER "true"
-
-# Deploy
-azd up
+azd env set AZURE_GITHUB_ACTIONS_ADMIN_PUBLIC_KEY "<ssh-public-key>"
 ```
+
+## IPAM — Spoke VNet Provisioning
+
+A VS Code task-driven tool for creating spoke VNets peered to the hub. Run tasks from the Command Palette (`Ctrl+Shift+P` → `Tasks: Run Task`):
+
+| Task | Description |
+|------|-------------|
+| IPAM: Discover available address space | Scans all VNets in the subscription and suggests available CIDR blocks |
+| IPAM: Provision new spoke VNet | Creates VNet, subnets, bidirectional peering, and sets hub DNS |
+| IPAM: Provision spoke (dry run) | Preview mode — shows commands without executing |
+| IPAM: List spoke VNets | Shows all hub peerings and VNets |
+| IPAM: Remove spoke VNet | Removes peerings and optionally deletes VNet/RG |
+
+### Setup
+
+```shell
+cp .azure-debug-config.example.json .azure-debug-config.json
+# Edit .azure-debug-config.json with your hub VNet, DNS server, and subscription details
+```
+
+## Network Debugging
+
+Diagnostic scripts for troubleshooting WSL2 → VPN → Azure connectivity. Available as VS Code tasks (prefixed with "Debug:") and as CLI scripts in `scripts/debug/`.
+
+| Task | Description |
+|------|-------------|
+| Debug: Run all diagnostics | Full suite — VPN, DNS, peerings, endpoints |
+| Debug: Check VPN connection | VPN routes, gateway health, Windows adapter |
+| Debug: Check DNS resolution | DNS resolution test for a hostname |
+| Debug: Check DNS server VM | CoreDNS VM power state and health |
+| Debug: Restart DNS server VM | Start the DNS VM if it was stopped |
+| Debug: Check VNet peerings | Hub↔spoke peering state and flags |
+| Debug: Check private DNS zones | Zone existence and VNet links |
+| Debug: Check private endpoints | PE connection status and DNS |
+
+### Azure MCP Server
+
+This repo includes an [Azure MCP Server](https://github.com/mcp/com.microsoft/azure) configuration (`.vscode/mcp.json`) that gives Copilot native access to Azure resources. When running in Agent Mode, Copilot can query VNets, peerings, DNS zones, and private endpoints directly — no `az` CLI needed for read operations.
+
+**Prerequisites**: Node.js (for `npx`), Azure CLI logged in (`az login`).
+
+The MCP server starts automatically when VS Code detects the configuration. No extra installation needed.
+
+### Copilot Agents
+
+This repo includes custom GitHub Copilot agents you can invoke in Copilot Chat:
+
+- **`@network-troubleshooter`** — Systematically diagnoses connectivity problems (VPN, DNS, peering, private endpoints) using the debug scripts, Azure CLI, and Azure MCP Server tools.
+- **`@ipam`** — Walks you through provisioning a new spoke VNet: discovers available address space, designs a subnet plan, runs a dry-run, provisions with peering and DNS, and verifies. Uses Azure MCP Server for read queries.
+
 

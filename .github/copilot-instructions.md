@@ -1,0 +1,176 @@
+# GitHub Copilot Instructions for az-lz-simple
+
+## Project Overview
+
+This repository deploys a **hub-spoke Azure landing zone** using **Azure Bicep** and **Azure Developer CLI (azd)**. It provisions a hub virtual network with a VPN gateway, DNS resolver VM, GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, and supporting infrastructure (Log Analytics, Storage Account with private endpoint, Logic Apps for compute scheduling).
+
+## Repository Structure
+
+```
+infra/                          # All Bicep infrastructure-as-code
+  main.bicep                    # Entry point (subscription-scoped deployment)
+  main.parameters.json          # Parameters file (uses ${AZD_ENV_VAR} syntax)
+  resource-names.bicep          # Centralized resource naming
+  abbreviations.json            # Azure resource abbreviation prefixes (CAF)
+  commercial.private-zones.json # Private DNS zone mappings for Azure commercial cloud
+  government.private-zones.json # Private DNS zone mappings for Azure government cloud
+  cloud-init/                   # Cloud-init scripts for VM provisioning
+    dns-resolver.txt            # CoreDNS setup on Ubuntu VM
+    github-actions-runner.txt   # GitHub Actions runner setup on Ubuntu VM
+  modules/                      # Reusable Bicep modules
+scripts/
+  debug/                        # Network connectivity diagnostic scripts
+  ipam/                         # Spoke VNet provisioning (IPAM) scripts
+.github/
+  copilot-instructions.md       # Copilot project-wide instructions
+  agents/
+    network-troubleshooter.agent.md  # Copilot agent for network debugging
+.vscode/
+  tasks.json                    # VS Code tasks for azd, Bicep, IPAM, debugging
+azure.yaml                      # Azure Developer CLI configuration
+.azure-debug-config.json        # Local Azure environment config (gitignored)
+.azure-debug-config.example.json # Template for the above
+```
+
+## Bicep Conventions
+
+### Naming
+- Use the `abbreviations.json` file for all Azure resource name prefixes. Load it with `loadJsonContent('./abbreviations.json')`.
+- Resource names follow the pattern: `{abbreviation}{resourceToken}` where `resourceToken` is a unique hash derived from `toLower(uniqueString(subscription().id, environmentName, location))`.
+- Use the `abbrs` variable (loaded from `abbreviations.json`) to look up the correct prefix for each resource type.
+
+### Azure Verified Modules (AVM)
+- Prefer [Azure Verified Modules](https://aka.ms/avm) from the Bicep public registry (`br/public:avm/...`) when available.
+- Examples already used in this repo:
+  - `br/public:avm/res/compute/virtual-machine`
+  - `br/public:avm/res/operational-insights/workspace`
+  - `br/public:avm/res/managed-identity/user-assigned-identity`
+  - `br/public:avm/res/network/virtual-network`
+  - `br/public:avm/res/network/network-security-group`
+
+### Module Structure
+- Each module file in `infra/modules/` deploys a single logical resource or tightly related set of resources.
+- Modules accept `resourceToken`, `abbrs`, and `location` as standard parameters.
+- The main deployment is **subscription-scoped** (`targetScope = 'subscription'`) and references an existing resource group.
+- Use `@description()` decorators on all parameters.
+- Use `@secure()` for sensitive parameters (passwords, tokens, keys).
+
+### Diagnostics & Monitoring
+- All major resources should send diagnostic logs to the Log Analytics workspace.
+- Use `diagnosticSettings` configuration blocks pointing to the shared `logAnalyticsWorkspaceId`.
+
+### Security
+- VMs use `TrustedLaunch` security profile with Secure Boot and vTPM enabled.
+- Storage accounts disable public network access and use private endpoints.
+- VPN Gateway uses Microsoft Entra ID (AAD) authentication.
+
+### Private DNS
+- Private DNS zones are managed via Azure Policy (defined in `modules/policies.bicep`).
+- Zone mappings come from `commercial.private-zones.json` or `government.private-zones.json` depending on the `privateZonesMappingDataFileType` parameter.
+- Policy auto-creates DNS zones and links them to the hub VNet when private endpoints are created.
+
+## Cloud-Init Scripts
+
+- Cloud-init scripts in `infra/cloud-init/` use `#cloud-config` YAML format.
+- They are loaded into Bicep via `loadTextContent()` and passed to VMs as `customData`.
+- Template placeholders like `<YOUR_GITHUB_REPO_URL>` are replaced at deployment time using Bicep's `replace()` function.
+
+## Azure Developer CLI (azd)
+
+- The `azure.yaml` file defines the azd project.
+- Infrastructure is in the `infra/` directory using the Bicep provider.
+- Parameters that use `${AZURE_*}` syntax in `main.parameters.json` are populated from azd environment variables set via `azd env set`.
+- Deploy with `azd up` (provisions infrastructure).
+
+## Role Assignments
+
+- Role assignments are subscription-scoped (see `modules/subscription-role-assignment.bicep`).
+- Always include a comment with the role name next to the `roleDefinitionId` GUID for readability.
+- The managed identity is assigned roles for: Network Contributor, Reader, AKS RBAC Cluster Admin, Private DNS Zone Contributor, Web Plan Contributor Admin, VM Contributor.
+
+## Compute Scheduling
+
+- Logic Apps handle scheduled start/stop of compute resources.
+- `logic-app-stop-compute.bicep` stops VMs, Container Apps, Function Apps, and AKS clusters.
+- `logic-app-start-central-vms.bicep` starts VMs in the resource group.
+- Schedules are configurable via `stopCompute` and `startCentralVMs` parameters.
+
+## IPAM — Spoke VNet Provisioning
+
+The repo includes a VS Code task-driven IPAM tool for creating spoke VNets. Scripts are in `scripts/ipam/`.
+
+### Workflow
+1. **Discover** available address space: `IPAM: Discover available address space` task (or `./scripts/ipam/discover-address-space.sh`)
+2. **Preview** the provisioning: `IPAM: Provision spoke (dry run)` task
+3. **Provision** the spoke: `IPAM: Provision new spoke VNet` task
+4. **List** all spokes: `IPAM: List spoke VNets` task
+5. **Remove** a spoke: `IPAM: Remove spoke VNet` task
+
+### What `provision-spoke.sh` does
+1. Creates the resource group (if `--create-rg`)
+2. Creates the spoke VNet with the specified address space and subnets
+3. Queries Azure for the hub DNS resolver VM's private IP and sets it as the spoke VNet's custom DNS
+4. Creates the hub→spoke peering first (with `--allow-gateway-transit`)
+5. Creates the spoke→hub peering (with `--use-remote-gateways` and `--allow-forwarded-traffic`)
+6. Verifies both peerings are in `Connected` state
+7. Appends the new spoke to `.azure-debug-config.json`
+
+### Address space conventions
+- Hub uses `10.255.0.0/16`
+- Spokes should use other ranges within `10.0.0.0/8` (which is advertised by the VPN gateway as a custom route)
+- The discovery script finds unused `/16` blocks automatically (configurable with `--prefix`)
+- Spoke-to-spoke communication requires direct mesh peering (traffic is not force-tunneled through the hub)
+
+### Spoke naming
+- VNet names follow: `vnet-{spoke-name}-{location}`
+- Peering names: hub→spoke = `spoke-{vnet-name}`, spoke→hub = `hub-{hub-vnet-name}`
+
+## Connectivity Debugging
+
+The repo includes diagnostic scripts in `scripts/debug/` for troubleshooting WSL2 → VPN → Azure connectivity. These are available as VS Code tasks (prefixed with "Debug:") and as Copilot agentic tools.
+
+### Local configuration
+All debug and IPAM scripts read from `.azure-debug-config.json` (gitignored). Users must copy `.azure-debug-config.example.json` and fill in their values. The file tracks:
+- Hub VNet, address space, subnets, resource group, DNS server VM details
+- VPN gateway name, SKU, P2S address pool
+- GitHub Actions runner VM name and resource ID
+- Private DNS zone list
+- Spoke VNets with address spaces (populated automatically by `provision-spoke.sh`)
+- Local environment info (Windows VPN adapter name)
+
+Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-config.sh`. It refreshes all cached fields from live Azure state.
+
+### Diagnostic scripts
+| Script | VS Code Task | What it checks |
+|--------|-------------|----------------|
+| `diagnose-all.sh` | Debug: Run all diagnostics | Runs all checks in sequence. Use `--all` to scan all spoke RGs for PEs |
+| `check-vpn.sh` | Debug: Check VPN connection | VPN routes, hub reachability, gateway health, Windows VPN adapter |
+| `check-dns.sh` | Debug: Check DNS resolution | DNS server reachability, resolution of hostnames, privatelink CNAME chain |
+| `check-dns-server.sh` | Debug: Check DNS server VM | VM power state, CoreDNS port 53, resolution test. Use `--restart` to start a stopped VM |
+| `check-peerings.sh` | Debug: Check VNet peerings | Hub peerings, spoke→hub reverse peerings, gateway transit settings |
+| `check-private-dns-zones.sh` | Debug: Check private DNS zones | Zone existence, VNet links, A records, Azure Policy assignments |
+| `check-private-endpoints.sh` | Debug: Check private endpoints | PE connection status, DNS zone groups, NIC IPs, DNS cross-check. Use `--all` for all RGs, `--hostname` to find by FQDN |
+| `check-dns-policy.sh` | Debug: Check DNS DINE policy | Verify DINE policies created DNS zone groups on PEs. Use `--remediate` to trigger Azure Policy remediation |
+| `manage-vm.sh` | VM: DNS/GHA tasks | Start, stop, restart, or check status of DNS server and GHA runner VMs |
+
+### Common failure scenarios and resolution
+1. **DNS resolves to public IP instead of private**: Missing private DNS zone or zone not linked to hub VNet → `check-private-dns-zones.sh`
+2. **Cannot reach any Azure resources**: VPN not connected → `check-vpn.sh`, verify Azure VPN Client on Windows
+3. **DNS times out**: DNS resolver VM stopped (Logic App schedule) → `manage-vm.sh start dns`
+4. **VPN reconnected but DNS broken**: Re-downloaded VPN XML profile missing `<dnsservers>` entry → Add DNS server IP to XML config
+5. **Cannot reach spoke resources from another spoke**: Spokes not mesh-peered → `check-peerings.sh`, create direct spoke-to-spoke peering
+6. **Private endpoint created but not resolving**: DINE policy hasn't created DNS zone group yet → `check-dns-policy.sh --all --remediate`
+7. **New resource deployed but A record missing**: DINE policy needs time (15-30 min) or remediation → `check-dns-policy.sh --remediate`
+
+## Custom Copilot Agents
+
+### Network Troubleshooter (`@network-troubleshooter`)
+A specialized Copilot agent for diagnosing Azure hub-spoke connectivity issues. It has deep knowledge of this landing zone architecture, the diagnostic scripts, and common failure patterns. Invoke it in Copilot Chat when you have a network connectivity problem — it will systematically diagnose the issue using the debug scripts and Azure CLI.
+
+Located at: `.github/agents/network-troubleshooter.agent.md`
+
+### IPAM (`@ipam`)
+A Copilot agent for provisioning and managing spoke VNets. It discovers available address space, designs subnet plans, provisions VNets with peering and DNS, and manages the spoke inventory. Invoke it when you need a new spoke VNet — it will walk you through discovery, planning, dry run, and provisioning.
+
+Located at: `.github/agents/ipam.agent.md`
+
