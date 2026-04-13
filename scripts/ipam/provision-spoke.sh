@@ -17,7 +17,8 @@
 #     --resource-group "RG-MY-APP" \
 #     --location "eastus2" \
 #     --address-space "10.1.0.0/16" \
-#     --subnets "default:10.1.0.0/24,private-endpoint:10.1.1.0/28"
+#     --subnets "default:10.1.0.0/24,private-endpoint:10.1.1.0/28" \
+#     --delegations "default:Microsoft.Web/serverFarms"
 #
 # Or with --create-rg to auto-create the resource group:
 #   ./scripts/ipam/provision-spoke.sh \
@@ -26,6 +27,7 @@
 #     --location "eastus2" \
 #     --address-space "10.1.0.0/16" \
 #     --subnets "default:10.1.0.0/24" \
+#     --delegations "app:Microsoft.Web/serverFarms" \
 #     --create-rg
 # -------------------------------------------------------------------
 set -euo pipefail
@@ -40,6 +42,8 @@ SPOKE_RG=""
 SPOKE_LOCATION=""
 ADDRESS_SPACE=""
 SUBNETS=""
+DELEGATIONS=""
+PROFILES=""
 CREATE_RG=false
 DRY_RUN=false
 
@@ -50,6 +54,8 @@ while [[ $# -gt 0 ]]; do
     --location) SPOKE_LOCATION="$2"; shift 2 ;;
     --address-space) ADDRESS_SPACE="$2"; shift 2 ;;
     --subnets) SUBNETS="$2"; shift 2 ;;
+    --delegations) DELEGATIONS="$2"; shift 2 ;;
+    --profiles) PROFILES="$2"; shift 2 ;;
     --create-rg) CREATE_RG=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -70,7 +76,13 @@ fi
 if [[ -z "$SPOKE_NAME" || -z "$SPOKE_RG" || -z "$ADDRESS_SPACE" ]]; then
   echo "ERROR: --name, --resource-group, and --address-space are required."
   echo ""
-  echo "Usage: $0 --name <name> --resource-group <rg> --location <loc> --address-space <cidr> --subnets <name:cidr,...>"
+  echo "Usage: $0 --name <name> --resource-group <rg> --location <loc> --address-space <cidr> --subnets <name:cidr,...> [--delegations <subnet:service,...>] [--profiles <subnet:profile,...>]"
+  exit 1
+fi
+
+VALIDATOR_SCRIPT="$SCRIPT_DIR/validate-cidr-plan.sh"
+if [[ ! -f "$VALIDATOR_SCRIPT" ]]; then
+  echo "ERROR: Validator script not found at $VALIDATOR_SCRIPT"
   exit 1
 fi
 
@@ -131,6 +143,49 @@ if [[ -n "$SUBNETS" ]]; then
   echo ""
 fi
 
+if [[ -n "$DELEGATIONS" ]]; then
+  echo "  Subnet delegations:"
+  IFS=',' read -ra DELEGATION_ARRAY <<< "$DELEGATIONS"
+  for delegation in "${DELEGATION_ARRAY[@]}"; do
+    IFS=':' read -r subnet_name service_name <<< "$delegation"
+    if [[ -z "$subnet_name" || -z "$service_name" ]]; then
+      echo "ERROR: Invalid delegation '$delegation'. Expected format: <subnet-name>:<service-name>"
+      exit 1
+    fi
+    echo "    - $subnet_name => $service_name"
+  done
+  echo ""
+fi
+
+if [[ -n "$PROFILES" ]]; then
+  echo "  Subnet profiles:"
+  IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
+  for profile in "${PROFILE_ARRAY[@]}"; do
+    IFS=':' read -r subnet_name profile_name <<< "$profile"
+    if [[ -z "$subnet_name" || -z "$profile_name" ]]; then
+      echo "ERROR: Invalid profile '$profile'. Expected format: <subnet-name>:<profile-name>"
+      exit 1
+    fi
+    echo "    - $subnet_name => $profile_name"
+  done
+  echo ""
+fi
+
+echo "── Preflight validation ──"
+VALIDATOR_ARGS=(--address-space "$ADDRESS_SPACE")
+if [[ -n "$SUBNETS" ]]; then
+  VALIDATOR_ARGS+=(--subnets "$SUBNETS")
+fi
+if [[ -n "$DELEGATIONS" ]]; then
+  VALIDATOR_ARGS+=(--delegations "$DELEGATIONS")
+fi
+if [[ -n "$PROFILES" ]]; then
+  VALIDATOR_ARGS+=(--profiles "$PROFILES")
+fi
+"$VALIDATOR_SCRIPT" "${VALIDATOR_ARGS[@]}"
+echo "  ✅ CIDR plan validated"
+echo ""
+
 if $DRY_RUN; then
   echo "  ── DRY RUN — no changes will be made ──"
   echo ""
@@ -144,6 +199,12 @@ if $DRY_RUN; then
     for subnet in "${SUBNET_ARRAY[@]}"; do
       IFS=':' read -r sname scidr <<< "$subnet"
       echo "  az network vnet subnet create --vnet-name $VNET_NAME --resource-group $SPOKE_RG --name $sname --address-prefixes $scidr --subscription $SUBSCRIPTION_ID"
+    done
+  fi
+  if [[ -n "$DELEGATIONS" ]]; then
+    for delegation in "${DELEGATION_ARRAY[@]}"; do
+      IFS=':' read -r subnet_name service_name <<< "$delegation"
+      echo "  az network vnet subnet update --resource-group $SPOKE_RG --vnet-name $VNET_NAME --name $subnet_name --delegations $service_name --subscription $SUBSCRIPTION_ID"
     done
   fi
   echo "  az network vnet peering create -g $SPOKE_RG -n hub-${HUB_VNET_NAME} --vnet-name $VNET_NAME --remote-vnet $HUB_VNET_ID --allow-vnet-access --allow-forwarded-traffic --use-remote-gateways --subscription $SUBSCRIPTION_ID"
@@ -208,11 +269,33 @@ else
   echo "── Step 3: No subnets specified (skipping) ──"
 fi
 
-# Step 4: Create hub→spoke peering (must be created FIRST for --use-remote-gateways to work)
+# Step 4: Apply subnet delegations
+if [[ -n "$DELEGATIONS" ]]; then
+  echo ""
+  echo "── Step 4: Applying subnet delegations ──"
+  IFS=',' read -ra DELEGATION_ARRAY <<< "$DELEGATIONS"
+  for delegation in "${DELEGATION_ARRAY[@]}"; do
+    IFS=':' read -r subnet_name service_name <<< "$delegation"
+    echo "  Delegating subnet $subnet_name to $service_name..."
+    az network vnet subnet update \
+      --resource-group "$SPOKE_RG" \
+      --vnet-name "$VNET_NAME" \
+      --name "$subnet_name" \
+      --delegations "$service_name" \
+      --subscription "$SUBSCRIPTION_ID" \
+      -o none
+    echo "  ✅ Subnet $subnet_name delegated to $service_name"
+  done
+else
+  echo ""
+  echo "── Step 4: No subnet delegations specified (skipping) ──"
+fi
+
+# Step 5: Create hub→spoke peering (must be created FIRST for --use-remote-gateways to work)
 SPOKE_VNET_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$SPOKE_RG/providers/Microsoft.Network/virtualNetworks/$VNET_NAME"
 
 echo ""
-echo "── Step 4: Creating hub → spoke peering ──"
+echo "── Step 5: Creating hub → spoke peering ──"
 az network vnet peering create \
   --resource-group "$HUB_RG" \
   --name "spoke-${VNET_NAME}" \
@@ -224,9 +307,9 @@ az network vnet peering create \
   -o none
 echo "  ✅ Hub → spoke peering created (gateway transit enabled)"
 
-# Step 5: Create spoke→hub peering
+# Step 6: Create spoke→hub peering
 echo ""
-echo "── Step 5: Creating spoke → hub peering ──"
+echo "── Step 6: Creating spoke → hub peering ──"
 az network vnet peering create \
   --resource-group "$SPOKE_RG" \
   --name "hub-${HUB_VNET_NAME}" \
@@ -239,9 +322,9 @@ az network vnet peering create \
   -o none
 echo "  ✅ Spoke → hub peering created (using remote gateways)"
 
-# Step 6: Verify peerings
+# Step 7: Verify peerings
 echo ""
-echo "── Step 6: Verifying peerings ──"
+echo "── Step 7: Verifying peerings ──"
 HUB_STATE=$(az network vnet peering show \
   --resource-group "$HUB_RG" \
   --vnet-name "$HUB_VNET_NAME" \
@@ -265,9 +348,9 @@ else
   echo "  ⚠️  Peerings may not be fully connected yet. Check with: ./scripts/debug/check-peerings.sh"
 fi
 
-# Step 7: Update .azure-debug-config.json
+# Step 8: Update .azure-debug-config.json
 echo ""
-echo "── Step 7: Updating .azure-debug-config.json ──"
+echo "── Step 8: Updating .azure-debug-config.json ──"
 UPDATED_CONFIG=$(jq \
   --arg name "$SPOKE_NAME" \
   --arg rg "$SPOKE_RG" \

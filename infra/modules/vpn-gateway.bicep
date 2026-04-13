@@ -37,8 +37,9 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
       }
     ]
     sku: {
-      name: 'VpnGw1'
-      tier: 'VpnGw1'
+      // VMScaleSet-based VPN gateways require zone-redundant SKUs.
+      name: 'VpnGw1AZ'
+      tier: 'VpnGw1AZ'
     }
     gatewayType: 'Vpn'
     enableBgp: true

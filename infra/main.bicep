@@ -58,6 +58,9 @@ param githubActionsRunnerVm object = {
   vmSize: 'Standard_D8ds_v4'
   diskSizeGB: 1024
   privateIPAddress: '10.255.1.5'
+  vmName: ''
+  nicName: ''
+  ipConfigurationName: 'ipconfig01'
 }
 
 var dnsResolverCloudInitTemplate = loadTextContent('cloud-init/dns-resolver.txt')
@@ -161,6 +164,9 @@ module githubActionsRunnerDeployment './modules/github-actions-runner-vm.bicep' 
     vmSize: githubActionsRunnerVm.vmSize
     diskSizeGB: githubActionsRunnerVm.diskSizeGB
     privateIPAddress: githubActionsRunnerVm.privateIPAddress
+    vmName: githubActionsRunnerVm.vmName
+    nicName: githubActionsRunnerVm.nicName
+    ipConfigurationName: githubActionsRunnerVm.ipConfigurationName
   }
 }
 
@@ -216,7 +222,6 @@ module storageAccountDeployment './modules/storage-account.bicep' = {
     abbrs: abbrs
     location: location
     privateEndpointSubnetResourceId: virtualNetworkDeployment.outputs.privateEndpointSubnetResourceId
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceDeployment.outputs.logAnalyticsWorkspaceId
   }
 }
 

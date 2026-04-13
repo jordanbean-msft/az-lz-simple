@@ -11,6 +11,9 @@
 # the directory itself is NOT committed
 .azure/
 
+# ── Generated IaC artifacts ──
+infra/main.json
+
 # ── OS files ──
 .DS_Store
 Thumbs.db
@@ -26,6 +29,10 @@ Desktop.ini
 
 # ── Shell / script artifacts ──
 *.log
+
+# ── Python artifacts ──
+__pycache__/
+*.pyc
 
 # ── Secrets & credentials (never commit) ──
 *.pem

@@ -36,21 +36,30 @@ param sku string = 'server'
 param version string = 'latest'
 
 @description('VM size.')
-param vmSize string = 'Standard_D8ds_v4'
+param vmSize string = 'Standard_D2s_v4'
 
 @description('OS disk size in GB.')
 param diskSizeGB int = 1024
 
-var vmName = '${abbrs.computeVirtualMachines}${resourceToken}'
-var nicName = '${abbrs.networkNetworkInterfaces}${resourceToken}'
+@description('Optional explicit VM name. If empty, name is derived from resourceToken.')
+param vmName string = ''
+
+@description('Optional explicit NIC name. If empty, name is derived from resourceToken.')
+param nicName string = ''
+
+@description('Primary IP configuration name for the NIC.')
+param ipConfigurationName string = 'ipconfig01'
+
+var resolvedVmName = empty(vmName) ? '${abbrs.computeVirtualMachines}${resourceToken}' : vmName
+var resolvedNicName = empty(nicName) ? '${abbrs.networkNetworkInterfaces}${resourceToken}' : nicName
 
 resource nic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
-  name: nicName
+  name: resolvedNicName
   location: location
   properties: {
     ipConfigurations: [
       {
-        name: 'ipconfig01'
+        name: ipConfigurationName
         properties: {
           subnet: {
             id: subnetResourceId
@@ -65,7 +74,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
 }
 
 resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
-  name: vmName
+  name: resolvedVmName
   location: location
   identity: {
     type: 'SystemAssigned'
@@ -75,7 +84,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
       vmSize: vmSize
     }
     osProfile: {
-      computerName: vmName
+      computerName: resolvedVmName
       adminUsername: adminUsername
       customData: base64(customData)
       linuxConfiguration: {

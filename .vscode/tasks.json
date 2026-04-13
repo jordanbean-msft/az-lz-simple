@@ -32,7 +32,10 @@
       "id": "spokeCreateRg",
       "description": "Create the resource group if it doesn't exist?",
       "type": "pickString",
-      "options": ["yes", "no"],
+      "options": [
+        "yes",
+        "no"
+      ],
       "default": "yes"
     },
     {
@@ -44,7 +47,10 @@
       "id": "spokeRemoveDeleteRg",
       "description": "Also delete the resource group and all its resources?",
       "type": "pickString",
-      "options": ["no", "yes"],
+      "options": [
+        "no",
+        "yes"
+      ],
       "default": "no"
     },
     {
@@ -62,6 +68,11 @@
     {
       "id": "azureResourceId",
       "description": "Azure resource ID (e.g. /subscriptions/.../providers/Microsoft.Web/sites/myapp)",
+      "type": "promptString"
+    },
+    {
+      "id": "ghaRunnerRepoUrl",
+      "description": "Target GitHub repository URL for the runner (e.g. https://github.com/org/repo)",
       "type": "promptString"
     }
   ],
@@ -375,6 +386,14 @@
       "command": "./scripts/debug/manage-vm.sh restart gha-runner",
       "group": "none",
       "detail": "Restart the GitHub Actions runner VM",
+      "problemMatcher": []
+    },
+    {
+      "label": "VM: GHA Runner — Retarget Repo",
+      "type": "shell",
+      "command": "./scripts/debug/retarget-gha-runner.sh --repo-url '${input:ghaRunnerRepoUrl}'",
+      "group": "none",
+      "detail": "Re-register the GitHub Actions runner VM to a different GitHub repository",
       "problemMatcher": []
     }
   ]

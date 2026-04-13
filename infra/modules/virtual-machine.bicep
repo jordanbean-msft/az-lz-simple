@@ -48,13 +48,14 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:0.17.0' = {
       caching: 'ReadWrite'
       diskSizeGB: diskSizeGB
       managedDisk: {
-        storageAccountType: 'StandardSSD_LRS'
+        storageAccountType: 'Standard_LRS'
       }
       deleteOption: 'Delete'
     }
     vmSize: vmSize
     customData: customData
     osType: osType
+    encryptionAtHost: false
     bootDiagnostics: true
   }
 }

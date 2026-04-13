@@ -39,6 +39,17 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
+if ! command -v python3 &>/dev/null; then
+  echo "ERROR: python3 is required." >&2
+  exit 1
+fi
+
+DISCOVER_PYTHON_SCRIPT="$SCRIPT_DIR/discover-address-space.py"
+if [[ ! -f "$DISCOVER_PYTHON_SCRIPT" ]]; then
+  echo "ERROR: Python discovery script not found at $DISCOVER_PYTHON_SCRIPT" >&2
+  exit 1
+fi
+
 SUBSCRIPTION_ID=$(jq -r '.subscriptionId' "$CONFIG_FILE")
 
 # Include cached spoke address spaces for quick display
@@ -69,51 +80,13 @@ if ! $JSON_OUTPUT; then
   echo ""
 fi
 
-# Find available /PREFIX_LEN blocks within 10.0.0.0/8
-# Strategy: iterate 10.X.0.0/PREFIX_LEN candidates and check for overlap
-python3 -c "
-import ipaddress, json, sys
+PYTHON_ARGS=(
+  --used-spaces "$USED_SPACES"
+  --prefix "$PREFIX_LEN"
+)
 
-used_raw = '''${USED_SPACES}'''.strip().split('\n')
-used = []
-for cidr in used_raw:
-    cidr = cidr.strip()
-    if cidr:
-        try:
-            used.append(ipaddress.ip_network(cidr, strict=False))
-        except ValueError:
-            pass
+if $JSON_OUTPUT; then
+  PYTHON_ARGS+=(--json)
+fi
 
-prefix_len = int('${PREFIX_LEN}')
-search_space = ipaddress.ip_network('10.0.0.0/8')
-suggestions = []
-
-for candidate in search_space.subnets(new_prefix=prefix_len):
-    overlaps = False
-    for u in used:
-        if candidate.overlaps(u):
-            overlaps = True
-            break
-    if not overlaps:
-        suggestions.append(str(candidate))
-        if len(suggestions) >= 5:
-            break
-
-json_mode = ${JSON_OUTPUT} == True if '${JSON_OUTPUT}' == 'true' else False
-
-if json_mode:
-    result = {
-        'usedAddressSpaces': [str(u) for u in used],
-        'suggestions': suggestions,
-        'prefixLength': prefix_len
-    }
-    print(json.dumps(result, indent=2))
-else:
-    print('── Suggested available /{} blocks ──'.format(prefix_len))
-    print()
-    for i, s in enumerate(suggestions, 1):
-        print('  {}. {}'.format(i, s))
-    print()
-    if not suggestions:
-        print('  No available /{} blocks found in 10.0.0.0/8!'.format(prefix_len))
-"
+python3 "$DISCOVER_PYTHON_SCRIPT" "${PYTHON_ARGS[@]}"
