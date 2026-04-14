@@ -385,6 +385,33 @@ echo "  DNS server:      $DNS_IP"
 echo "  Hub peering:     Connected"
 echo "  VPN gateway:     Accessible via hub"
 echo ""
+
+# ── Print created resource IDs ──
+RG_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$SPOKE_RG"
+echo "── Created Resource IDs ──"
+echo ""
+echo "  Resource group:"
+echo "    $RG_ID"
+echo ""
+echo "  VNet:"
+echo "    $SPOKE_VNET_ID"
+echo ""
+if [[ -n "$SUBNETS" ]]; then
+  echo "  Subnets:"
+  IFS=',' read -ra _SUBNET_IDS <<< "$SUBNETS"
+  for subnet in "${_SUBNET_IDS[@]}"; do
+    IFS=':' read -r sname _ <<< "$subnet"
+    echo "    ${SPOKE_VNET_ID}/subnets/${sname}"
+  done
+  echo ""
+fi
+echo "  Hub → spoke peering:"
+echo "    ${HUB_VNET_ID}/virtualNetworkPeerings/spoke-${VNET_NAME}"
+echo ""
+echo "  Spoke → hub peering:"
+echo "    ${SPOKE_VNET_ID}/virtualNetworkPeerings/hub-${HUB_VNET_NAME}"
+echo ""
+
 echo "  Next steps:"
 echo "    - Deploy resources into the spoke VNet"
 echo "    - Private endpoints will auto-register DNS via Azure Policy"
