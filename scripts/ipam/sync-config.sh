@@ -87,7 +87,7 @@ if [[ -n "$HUB_VNET_INFO" && "$HUB_VNET_INFO" != "{}" ]]; then
   if [[ -n "$LIVE_ADDRESS_SPACE" && "$LIVE_ADDRESS_SPACE" != "$CONFIG_ADDRESS_SPACE" ]]; then
     echo "  ⚠️  Hub address space changed: ${CONFIG_ADDRESS_SPACE:-<empty>} → $LIVE_ADDRESS_SPACE"
     UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --arg s "$LIVE_ADDRESS_SPACE" '.hub.addressSpace = $s')
-    ((CHANGES++))
+    ((CHANGES+=1))
   else
     echo "  ✅ Hub address space is current ($LIVE_ADDRESS_SPACE)"
   fi
@@ -99,7 +99,7 @@ if [[ -n "$HUB_VNET_INFO" && "$HUB_VNET_INFO" != "{}" ]]; then
     echo "  ⚠️  Hub subnets updated ($SUBNET_COUNT subnet(s))"
     echo "$LIVE_SUBNETS" | jq -r '.[] | "    - \(.name): \(.addressPrefix)"'
     UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --argjson s "$LIVE_SUBNETS" '.hub.subnets = $s')
-    ((CHANGES++))
+    ((CHANGES+=1))
   else
     echo "  ✅ Hub subnets are current"
   fi
@@ -133,7 +133,7 @@ if [[ -n "$VPN_GW_INFO" && "$VPN_GW_INFO" != "{}" && "$VPN_GW_INFO" != "null" ]]
         --arg sku "$LIVE_GW_SKU" \
         --argjson p2s "$LIVE_P2S" \
         '.hub.vpnGateway = {name: $name, resourceId: $id, sku: $sku, p2sAddressPool: $p2s}')
-      ((CHANGES++))
+      ((CHANGES+=1))
       echo "  ⚠️  VPN Gateway config updated"
     else
       # Still refresh sku and p2s in case they changed
@@ -144,7 +144,7 @@ if [[ -n "$VPN_GW_INFO" && "$VPN_GW_INFO" != "{}" && "$VPN_GW_INFO" != "null" ]]
           --arg sku "$LIVE_GW_SKU" \
           --argjson p2s "$LIVE_P2S" \
           '.hub.vpnGateway.sku = $sku | .hub.vpnGateway.p2sAddressPool = $p2s')
-        ((CHANGES++))
+        ((CHANGES+=1))
         echo "  ⚠️  VPN Gateway SKU/P2S pool updated"
       else
         echo "  ✅ VPN Gateway info is current"
@@ -168,7 +168,7 @@ if [[ -n "$DNS_VM_EXISTS" ]]; then
   if [[ -n "$LIVE_DNS_IP" && "$LIVE_DNS_IP" != "$CONFIG_DNS_IP" ]]; then
     echo "  ⚠️  DNS server IP changed: $CONFIG_DNS_IP → $LIVE_DNS_IP"
     UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --arg ip "$LIVE_DNS_IP" '.hub.dnsServerPrivateIp = $ip')
-    ((CHANGES++))
+    ((CHANGES+=1))
   else
     echo "  ✅ DNS server IP is current ($CONFIG_DNS_IP)"
   fi
@@ -182,9 +182,9 @@ echo "── Refreshing GitHub Actions runner VM ──"
 
 CONFIG_GHA_NAME=$(echo "$UPDATED_CONFIG" | jq -r '.hub.ghaRunnerVmName // ""')
 if [[ -z "$CONFIG_GHA_NAME" || "$CONFIG_GHA_NAME" == "null" ]]; then
-  # Discover by naming convention: vm-gha-*
+  # Discover by naming convention (common patterns): vm-gha-*, *gha*, *runner*
   GHA_VM=$(az vm list --resource-group "$HUB_RG" --subscription "$SUBSCRIPTION_ID" \
-    --query "[?starts_with(name, 'vm-gha-') || starts_with(name, 'VM-GHA-')].{name:name, id:id}" \
+    --query "[?contains(to_lower(name), 'gha') || contains(to_lower(name), 'runner')].{name:name, id:id}" \
     -o json 2>/dev/null || echo "[]")
   GHA_COUNT=$(echo "$GHA_VM" | jq length)
   if [[ "$GHA_COUNT" -gt 0 ]]; then
@@ -195,9 +195,9 @@ if [[ -z "$CONFIG_GHA_NAME" || "$CONFIG_GHA_NAME" == "null" ]]; then
       --arg name "$LIVE_GHA_NAME" \
       --arg id "$LIVE_GHA_ID" \
       '.hub.ghaRunnerVmName = $name | .hub.ghaRunnerVmResourceId = $id')
-    ((CHANGES++))
+    ((CHANGES+=1))
   else
-    echo "  ⚠️  No GHA runner VM (vm-gha-*) found in $HUB_RG"
+    echo "  ⚠️  No GHA runner VM (gha/runner naming patterns) found in $HUB_RG"
   fi
 else
   # Verify it still exists
@@ -207,7 +207,7 @@ else
   else
     echo "  ⚠️  GHA runner VM '$CONFIG_GHA_NAME' no longer exists — clearing from config"
     UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq '.hub.ghaRunnerVmName = "" | .hub.ghaRunnerVmResourceId = ""')
-    ((CHANGES++))
+    ((CHANGES+=1))
   fi
 fi
 
@@ -245,7 +245,7 @@ done
 
 for stale in "${STALE_SPOKES[@]}"; do
   UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --arg name "$stale" '.spokes = [.spokes[] | select(.name != $name)]')
-  ((CHANGES++))
+  ((CHANGES+=1))
 done
 
 if [[ ${#STALE_SPOKES[@]} -gt 0 ]]; then
@@ -319,7 +319,7 @@ for i in $(seq 0 $((PEERING_COUNT - 1))); do
       addressSpace: $addressSpace,
       location: $location
     }]')
-  ((CHANGES++))
+  ((CHANGES+=1))
 done
 
 # ── 7. Refresh spoke address spaces for existing spokes ──
@@ -340,7 +340,7 @@ for i in $(seq 0 $((SPOKE_COUNT_NOW - 1))); do
     if [[ -n "$LIVE_SPACE" ]]; then
       echo "  ➕ Spoke '$S_NAME': address space → $LIVE_SPACE"
       UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --arg idx "$i" --arg s "$LIVE_SPACE" '.spokes[$idx | tonumber].addressSpace = $s')
-      ((CHANGES++))
+      ((CHANGES+=1))
     fi
   fi
 done
@@ -364,7 +364,7 @@ if [[ "$LIVE_ZONES" != "$CONFIG_ZONES" ]]; then
     echo "    ... and $((ZONE_COUNT - 10)) more"
   fi
   UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --argjson z "$LIVE_ZONES" '.privateDnsZones = $z')
-  ((CHANGES++))
+  ((CHANGES+=1))
 else
   echo "  ✅ Private DNS zones are current ($(echo "$CONFIG_ZONES" | jq length) zone(s))"
 fi
@@ -379,7 +379,7 @@ if command -v powershell.exe &>/dev/null; then
   if [[ -n "$LIVE_VPN_ADAPTER" && "$LIVE_VPN_ADAPTER" != "$CONFIG_VPN_ADAPTER" ]]; then
     echo "  ⚠️  VPN adapter name: ${CONFIG_VPN_ADAPTER:-<empty>} → $LIVE_VPN_ADAPTER"
     UPDATED_CONFIG=$(echo "$UPDATED_CONFIG" | jq --arg a "$LIVE_VPN_ADAPTER" '.local.vpnAdapterName = $a')
-    ((CHANGES++))
+    ((CHANGES+=1))
   elif [[ -n "$LIVE_VPN_ADAPTER" ]]; then
     echo "  ✅ VPN adapter name is current ($LIVE_VPN_ADAPTER)"
   else
