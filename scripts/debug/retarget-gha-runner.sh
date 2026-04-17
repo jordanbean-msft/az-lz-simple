@@ -123,7 +123,7 @@ fi
 
 if [[ -z "${RUNNER_VM_NAME:-}" || "$RUNNER_VM_NAME" == "null" ]]; then
   # Second fallback: discover candidates in hub RG
-  VM_CANDIDATES=$(az vm list \
+  VM_CANDIDATES=$(run_with_timeout 30 az vm list \
     --resource-group "$DBG_HUB_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[?name != '$DBG_DNS_VM_NAME'].name" \
@@ -172,12 +172,12 @@ fi
 print_header "Retarget GitHub Actions Runner"
 print_step 1 "Validating Azure access and VM state"
 
-if ! az account show --query id -o tsv >/dev/null 2>&1; then
+if ! run_with_timeout 15 az account show --query id -o tsv >/dev/null 2>&1; then
   result FAIL "Azure CLI is not logged in. Run: az login" || true
   print_summary
 fi
 
-POWER_STATE=$(az vm get-instance-view \
+POWER_STATE=$(run_with_timeout 25 az vm get-instance-view \
   --resource-group "$DBG_HUB_RG" \
   --name "$RUNNER_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -186,13 +186,13 @@ POWER_STATE=$(az vm get-instance-view \
 
 if [[ "$POWER_STATE" != *"running"* ]]; then
   result WARN "Runner VM is not running ($POWER_STATE). Starting VM..." || true
-  az vm start \
+  run_with_timeout 35 az vm start \
     --resource-group "$DBG_HUB_RG" \
     --name "$RUNNER_VM_NAME" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --no-wait >/dev/null
 
-  az vm wait \
+  run_with_timeout 90 az vm wait \
     --resource-group "$DBG_HUB_RG" \
     --name "$RUNNER_VM_NAME" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -291,7 +291,7 @@ EOF
 REMOTE_SCRIPT="${REMOTE_SCRIPT/__TARGET_REPO_B64__/$TARGET_REPO_B64}"
 REMOTE_SCRIPT="${REMOTE_SCRIPT/__PAT_B64__/$PAT_B64}"
 
-RUN_OUTPUT=$(az vm run-command invoke \
+RUN_OUTPUT=$(run_with_timeout 120 az vm run-command invoke \
   --resource-group "$DBG_HUB_RG" \
   --name "$RUNNER_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -308,7 +308,7 @@ if echo "$RUN_OUTPUT" | grep -qi "error:"; then
 fi
 
 # Verify runner is now pointed at the requested repository.
-LIVE_REPO_URL=$(az vm run-command invoke \
+LIVE_REPO_URL=$(run_with_timeout 120 az vm run-command invoke \
   --resource-group "$DBG_HUB_RG" \
   --name "$RUNNER_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \

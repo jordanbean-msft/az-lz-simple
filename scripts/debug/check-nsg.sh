@@ -54,7 +54,7 @@ if [[ -n "$SPECIFIC_NIC" ]]; then
   echo "    subnet-level NSG + NIC-level NSG + Azure default rules."
   echo ""
 
-  EFFECTIVE=$(az network nic list-effective-nsg \
+  EFFECTIVE=$(run_with_timeout 30 az network nic list-effective-nsg \
     --name "$SPECIFIC_NIC" \
     --resource-group "$NIC_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -101,11 +101,11 @@ fi
 NSG_STEP=0
 check_nsg_in_rg() {
   local RG="$1"
-  ((NSG_STEP++))
+  NSG_STEP=$((NSG_STEP + 1))
   print_step $NSG_STEP "Checking NSGs in resource group: $RG"
 
   # List all NSGs in the RG
-  NSGS=$(az network nsg list \
+  NSGS=$(run_with_timeout 30 az network nsg list \
     --resource-group "$RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[].{name:name, id:id, subnets:subnets[].id, nics:networkInterfaces[].id}" \
@@ -122,13 +122,13 @@ check_nsg_in_rg() {
   echo "    Found $NSG_COUNT NSG(s)"
 
   # List all subnets in VNets in this RG to find unprotected ones
-  VNETS=$(az network vnet list \
+  VNETS=$(run_with_timeout 30 az network vnet list \
     --resource-group "$RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[].{name:name, subnets:subnets[].{name:name, nsg:networkSecurityGroup.id, prefix:addressPrefix}}" \
     -o json 2>/dev/null || echo "[]")
 
-  echo "$NSGS" | jq -c '.[]' | while read -r nsg; do
+  while read -r nsg; do
     NSG_NAME=$(echo "$nsg" | jq -r '.name')
     SUBNET_COUNT=$(echo "$nsg" | jq '[.subnets // [] | length] | add')
     NIC_COUNT=$(echo "$nsg" | jq '[.nics // [] | length] | add')
@@ -143,7 +143,7 @@ check_nsg_in_rg() {
     fi
 
     # Get all rules
-    RULES=$(az network nsg rule list \
+    RULES=$(run_with_timeout 25 az network nsg rule list \
       --nsg-name "$NSG_NAME" \
       --resource-group "$RG" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -158,7 +158,7 @@ check_nsg_in_rg() {
     printf "      %-5s %-30s %-8s %-8s %-6s %-20s %-20s %s\n" "PRI" "NAME" "DIR" "ACCESS" "PROTO" "SOURCE" "DESTINATION" "PORTS"
     printf "      %-5s %-30s %-8s %-8s %-6s %-20s %-20s %s\n" "───" "──────────────────────────────" "────────" "────────" "──────" "────────────────────" "────────────────────" "─────"
 
-    echo "$RULES" | jq -c 'sort_by(.priority) | .[]' | while read -r rule; do
+    while read -r rule; do
       PRI=$(echo "$rule" | jq -r '.priority')
       NAME=$(echo "$rule" | jq -r '.name')
       DIR=$(echo "$rule" | jq -r '.direction')
@@ -174,13 +174,21 @@ check_nsg_in_rg() {
       [[ ${#DST} -gt 20 ]] && DST="${DST:0:17}..."
 
       printf "      %-5s %-30s %-8s %-8s %-6s %-20s %-20s %s\n" "$PRI" "$NAME" "$DIR" "$ACCESS" "$PROTO" "$SRC" "$DST" "$PORTS"
-    done
+    done < <(echo "$RULES" | jq -c 'sort_by(.priority) | .[]')
 
     echo ""
 
     # Analyze for common issues
     INBOUND_RULES=$(echo "$RULES" | jq '[.[] | select(.direction == "Inbound")]')
     OUTBOUND_RULES=$(echo "$RULES" | jq '[.[] | select(.direction == "Outbound")]')
+
+    # Private endpoint subnet NSGs often have intentionally narrow egress.
+    # Missing outbound 53/443 there usually impacts PE subnet diagnostics, not local internet on Windows.
+    NSG_SUBNET_IDS=$(echo "$nsg" | jq -r '.subnets[]? // empty')
+    IS_PRIVATE_ENDPOINT_NSG=false
+    if echo "$NSG_NAME" | grep -qi "private-endpoint" || echo "$NSG_SUBNET_IDS" | grep -qi "private-endpoint"; then
+      IS_PRIVATE_ENDPOINT_NSG=true
+    fi
 
     # Check: Does inbound allow VPN client traffic (10.0.0.0/8 covers VPN P2S pool and spokes)?
     VPN_INBOUND=$(echo "$INBOUND_RULES" | jq '[.[] | select(.access == "Allow") | select(
@@ -215,9 +223,15 @@ check_nsg_in_rg() {
       # Only warn if there's an explicit outbound deny (otherwise Azure defaults allow it)
       OUTBOUND_DENY=$(echo "$OUTBOUND_RULES" | jq '[.[] | select(.access == "Deny")] | length')
       if [[ "$OUTBOUND_DENY" -gt 0 ]]; then
-        result FAIL "NSG '$NSG_NAME' has outbound deny rules but no allow for DNS (port 53)"
-        echo "         → Resources in this subnet won't be able to resolve DNS"
-        echo "         → Add: az network nsg rule create --nsg-name $NSG_NAME -g $RG --name AllowDns --priority 100 --direction Outbound --access Allow --protocol '*' --destination-port-ranges 53"
+        if [[ "$IS_PRIVATE_ENDPOINT_NSG" == true ]]; then
+          result WARN "NSG '$NSG_NAME' lacks explicit outbound DNS allow (port 53) with deny rules present"
+          echo "         → Impact likely limited to resources in the PE subnet and diagnostic signal quality."
+          echo "         → This is unlikely to be the primary cause of local Windows internet loss."
+        else
+          result FAIL "NSG '$NSG_NAME' has outbound deny rules but no allow for DNS (port 53)"
+          echo "         → Resources in this subnet won't be able to resolve DNS"
+          echo "         → Add: az network nsg rule create --nsg-name $NSG_NAME -g $RG --name AllowDns --priority 100 --direction Outbound --access Allow --protocol '*' --destination-port-ranges 53"
+        fi
       fi
     fi
 
@@ -231,18 +245,23 @@ check_nsg_in_rg() {
     else
       OUTBOUND_DENY=$(echo "$OUTBOUND_RULES" | jq '[.[] | select(.access == "Deny")] | length')
       if [[ "$OUTBOUND_DENY" -gt 0 ]]; then
-        result FAIL "NSG '$NSG_NAME' has outbound deny rules but no allow for HTTPS (port 443)"
-        echo "         → Most Azure PaaS services and private endpoints use port 443"
+        if [[ "$IS_PRIVATE_ENDPOINT_NSG" == true ]]; then
+          result WARN "NSG '$NSG_NAME' lacks explicit outbound HTTPS allow (port 443) with deny rules present"
+          echo "         → Impact likely limited to PE-subnet egress behavior, not broad Windows internet connectivity."
+        else
+          result FAIL "NSG '$NSG_NAME' has outbound deny rules but no allow for HTTPS (port 443)"
+          echo "         → Most Azure PaaS services and private endpoints use port 443"
+        fi
       fi
     fi
-  done
+  done < <(echo "$NSGS" | jq -c '.[]')
 
   # Check for subnets without NSGs (excluding GatewaySubnet which must not have NSGs)
   echo ""
   echo "    Checking for unprotected subnets..."
-  echo "$VNETS" | jq -c '.[]' | while read -r vnet; do
+  while read -r vnet; do
     VNET_NAME=$(echo "$vnet" | jq -r '.name')
-    echo "$vnet" | jq -c '.subnets[]?' | while read -r subnet; do
+    while read -r subnet; do
       SUBNET_NAME=$(echo "$subnet" | jq -r '.name')
       SUBNET_NSG=$(echo "$subnet" | jq -r '.nsg // ""')
       SUBNET_PREFIX=$(echo "$subnet" | jq -r '.prefix // ""')
@@ -258,8 +277,8 @@ check_nsg_in_rg() {
         result WARN "Subnet '$SUBNET_NAME' ($SUBNET_PREFIX) in $VNET_NAME has no NSG"
         echo "         → Consider attaching an NSG for defense in depth"
       fi
-    done
-  done
+    done < <(echo "$vnet" | jq -c '.subnets[]?')
+  done < <(echo "$VNETS" | jq -c '.[]')
 }
 
 # ─────────────────────────────────────────────────────────

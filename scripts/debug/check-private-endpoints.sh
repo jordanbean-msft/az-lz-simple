@@ -87,7 +87,7 @@ print_step 1 "Scanning resource groups"
 for TARGET_RG in "${TARGET_RGS[@]}"; do
   echo ""
   echo "  Resource group: $TARGET_RG"
-  RG_PES=$(az network private-endpoint list \
+  RG_PES=$(run_with_timeout 30 az network private-endpoint list \
     --resource-group "$TARGET_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[].{name:name, resourceGroup:'$TARGET_RG', privateLinkServiceConnections:privateLinkServiceConnections[0].{status:privateLinkServiceConnectionState.status, resourceId:privateLinkServiceId, groupIds:groupIds}, customDnsConfigs:customDnsConfigs, networkInterfaces:networkInterfaces, subnet:subnet.id}" \
@@ -152,7 +152,7 @@ else
     # Get NIC private IP
     NIC_ID=$(echo "$pe" | jq -r '.networkInterfaces[0].id // empty')
     if [[ -n "$NIC_ID" ]]; then
-      PE_IP=$(az network nic show \
+      PE_IP=$(run_with_timeout 20 az network nic show \
         --ids "$NIC_ID" \
         --subscription "$DBG_SUBSCRIPTION_ID" \
         --query "ipConfigurations[0].privateIpAddress" \
@@ -179,7 +179,7 @@ else
     fi
 
     # Check DNS zone group (created by DINE policy)
-    ZONE_GROUPS=$(az network private-endpoint dns-zone-group list \
+    ZONE_GROUPS=$(run_with_timeout 20 az network private-endpoint dns-zone-group list \
       --endpoint-name "$PE_NAME" \
       --resource-group "$PE_RG" \
       --subscription "$DBG_SUBSCRIPTION_ID" \

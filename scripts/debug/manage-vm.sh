@@ -72,7 +72,7 @@ echo ""
 
 # Get current power state
 get_power_state() {
-  az vm get-instance-view \
+  run_with_timeout 25 az vm get-instance-view \
     --resource-group "$DBG_HUB_RG" \
     --name "$VM_NAME" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -105,7 +105,7 @@ case "$ACTION" in
       exit 0
     fi
     echo "  Starting $VM_LABEL..."
-    az vm start \
+    run_with_timeout 30 az vm start \
       --resource-group "$DBG_HUB_RG" \
       --name "$VM_NAME" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -122,7 +122,7 @@ case "$ACTION" in
       exit 0
     fi
     echo "  Stopping (deallocating) $VM_LABEL..."
-    az vm deallocate \
+    run_with_timeout 30 az vm deallocate \
       --resource-group "$DBG_HUB_RG" \
       --name "$VM_NAME" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -136,7 +136,7 @@ case "$ACTION" in
     POWER_STATE=$(get_power_state)
     if [[ "$POWER_STATE" == *"deallocated"* || "$POWER_STATE" == *"stopped"* ]]; then
       echo "  VM is stopped — starting instead of restarting..."
-      az vm start \
+      run_with_timeout 30 az vm start \
         --resource-group "$DBG_HUB_RG" \
         --name "$VM_NAME" \
         --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -144,7 +144,7 @@ case "$ACTION" in
       echo "  ✅ Start command issued (--no-wait)."
     else
       echo "  Restarting $VM_LABEL..."
-      az vm restart \
+      run_with_timeout 30 az vm restart \
         --resource-group "$DBG_HUB_RG" \
         --name "$VM_NAME" \
         --subscription "$DBG_SUBSCRIPTION_ID" \

@@ -13,6 +13,8 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
   sku: {
     name: 'Standard'
   }
+  // AZ VPN gateway SKUs require a zone-redundant (Standard) Public IP with explicit zones.
+  zones: ['1', '2', '3']
   properties: {
     publicIPAllocationMethod: 'Static'
   }
@@ -37,7 +39,7 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = {
       }
     ]
     sku: {
-      // VMScaleSet-based VPN gateways require zone-redundant SKUs.
+      // AZ SKU is required by Azure — non-AZ SKUs (VpnGw1-5) are no longer supported for new/updated gateways.
       name: 'VpnGw1AZ'
       tier: 'VpnGw1AZ'
     }

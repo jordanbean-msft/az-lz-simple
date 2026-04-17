@@ -89,12 +89,13 @@
         "offer": "ubuntu-24_04-lts",
         "sku": "server",
         "version": "latest",
-        "vmSize": "Standard_D2s_v4",
+        "vmSize": "Standard_B2as_v2",
         "diskSizeGB": 1024,
         "privateIPAddress": "10.255.1.5",
-        "vmName": "vm-central-ghar471",
+        "vmName": "vm-central-ghar",
         "nicName": "vm-central-ghar471",
-        "ipConfigurationName": "ipconfig1"
+        "ipConfigurationName": "ipconfig1",
+        "adminUsername": "azureuser"
       }
     }
   }

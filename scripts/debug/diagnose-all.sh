@@ -52,7 +52,7 @@ FAILED_CHECKS=()
 run_check() {
   local name="$1"
   shift
-  ((TOTAL_CHECKS++))
+  TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
   echo ""
   echo "── Step $TOTAL_CHECKS: $name ──"
   if "$@"; then

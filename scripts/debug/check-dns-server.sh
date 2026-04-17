@@ -29,7 +29,7 @@ fi
 
 # 1. Check VM power state
 print_step 1 "VM power state"
-VM_STATUS=$(az vm get-instance-view \
+VM_STATUS=$(run_with_timeout 25 az vm get-instance-view \
   --resource-group "$DBG_HUB_RG" \
   --name "$DBG_DNS_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -49,7 +49,7 @@ elif [[ "$VM_STATUS" == "VM deallocated" || "$VM_STATUS" == "VM stopped" ]]; the
   if [[ "$ACTION" == "--restart" ]]; then
     echo ""
     echo "  Starting VM..."
-    az vm start --resource-group "$DBG_HUB_RG" --name "$DBG_DNS_VM_NAME" --subscription "$DBG_SUBSCRIPTION_ID"
+    run_with_timeout 45 az vm start --resource-group "$DBG_HUB_RG" --name "$DBG_DNS_VM_NAME" --subscription "$DBG_SUBSCRIPTION_ID"
     echo "  ✅ VM start command issued. Waiting 30s for boot..."
     sleep 30
   fi
@@ -59,7 +59,7 @@ fi
 
 # 2. Check VM provisioning state
 print_step 2 "VM provisioning state"
-PROV_STATE=$(az vm show \
+PROV_STATE=$(run_with_timeout 25 az vm show \
   --resource-group "$DBG_HUB_RG" \
   --name "$DBG_DNS_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -69,13 +69,16 @@ PROV_STATE=$(az vm show \
 echo "    Provisioning state: $PROV_STATE"
 if [[ "$PROV_STATE" == "Succeeded" ]]; then
   result PASS "VM provisioning state is Succeeded"
+elif [[ "$PROV_STATE" == "Updating" ]]; then
+  result WARN "VM provisioning state is Updating (often transient during extension/image updates)"
+  echo "         → This state alone usually does not break DNS if port 53 and resolution checks pass."
 else
   result FAIL "VM provisioning state is $PROV_STATE"
 fi
 
 # 3. Check NIC and private IP
 print_step 3 "Network interface and IP"
-NIC_INFO=$(az vm show \
+NIC_INFO=$(run_with_timeout 25 az vm show \
   --resource-group "$DBG_HUB_RG" \
   --name "$DBG_DNS_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \

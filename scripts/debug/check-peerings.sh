@@ -30,7 +30,7 @@ fi
 # 1. List all peerings from the hub VNet
 print_step 1 "Hub VNet peerings ($DBG_HUB_VNET_NAME)"
 HUB_RG_LOWER=$(echo "$DBG_HUB_RG" | tr '[:upper:]' '[:lower:]')
-PEERINGS=$(az network vnet peering list \
+PEERINGS=$(run_with_timeout 25 az network vnet peering list \
   --resource-group "$DBG_HUB_RG" \
   --vnet-name "$DBG_HUB_VNET_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -86,7 +86,7 @@ if [[ -n "$SPECIFIC_SPOKE" ]]; then
   SPOKE_SUB=$(echo "$SPECIFIC_SPOKE" | grep -oP 'subscriptions/\K[^/]+')
 
   echo "    Checking spoke: $SPOKE_VNET (RG: $SPOKE_RG)"
-  SPOKE_PEERINGS=$(az network vnet peering list \
+  SPOKE_PEERINGS=$(run_with_timeout 25 az network vnet peering list \
     --resource-group "$SPOKE_RG" \
     --vnet-name "$SPOKE_VNET" \
     --subscription "${SPOKE_SUB:-$DBG_SUBSCRIPTION_ID}" \
@@ -120,7 +120,7 @@ elif [[ "$DBG_SPOKE_COUNT" -gt 0 ]]; then
     SPOKE_SUB=$(jq -r ".spokes[$i].subscriptionId // \"$DBG_SUBSCRIPTION_ID\"" "$REPO_ROOT/.azure-debug-config.json")
 
     echo "    Checking spoke: $SPOKE_VNET (RG: $SPOKE_RG)"
-    SPOKE_PEERINGS=$(az network vnet peering list \
+    SPOKE_PEERINGS=$(run_with_timeout 25 az network vnet peering list \
       --resource-group "$SPOKE_RG" \
       --vnet-name "$SPOKE_VNET" \
       --subscription "$SPOKE_SUB" \
@@ -158,7 +158,7 @@ if [[ -n "$DBG_HUB_ADDRESS_SPACE" ]]; then
   echo "    Hub VNet address space: $DBG_HUB_ADDRESS_SPACE (cached)"
 fi
 
-HUB_DNS=$(az network vnet show \
+HUB_DNS=$(run_with_timeout 20 az network vnet show \
   --resource-group "$DBG_HUB_RG" \
   --name "$DBG_HUB_VNET_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \

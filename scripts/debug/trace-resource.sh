@@ -61,7 +61,7 @@ FQDN=""
 # Try common FQDN property paths based on resource type
 fqdn_from_resource() {
   local props
-  props=$(az resource show --ids "$RESOURCE_ID" -o json 2>/dev/null) || return 1
+  props=$(run_with_timeout 25 az resource show --ids "$RESOURCE_ID" -o json 2>/dev/null) || return 1
 
   # Try well-known property paths (ordered most-specific first)
   local candidates=(
@@ -262,7 +262,7 @@ else
 fi
 
 # Check public network access setting
-PUB_ACCESS=$(az resource show --ids "$RESOURCE_ID" --query "properties.publicNetworkAccess" -o tsv 2>/dev/null || echo "unknown")
+PUB_ACCESS=$(run_with_timeout 20 az resource show --ids "$RESOURCE_ID" --query "properties.publicNetworkAccess" -o tsv 2>/dev/null || echo "unknown")
 if [[ "$PUB_ACCESS" == "Disabled" || "$PUB_ACCESS" == "disabled" ]]; then
   result PASS "Public network access is disabled (private-only)"
 elif [[ "$PUB_ACCESS" == "Enabled" || "$PUB_ACCESS" == "enabled" ]]; then
@@ -290,7 +290,7 @@ FOUND_PES="[]"
 RESOURCE_ID_LOWER=$(echo "$RESOURCE_ID" | tr '[:upper:]' '[:lower:]')
 
 for RG in "${SEARCH_RGS[@]}"; do
-  RG_PES=$(az network private-endpoint list \
+  RG_PES=$(run_with_timeout 30 az network private-endpoint list \
     --resource-group "$RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     -o json 2>/dev/null || echo "[]")
@@ -355,7 +355,7 @@ echo "$FOUND_PES" | jq -c '.[]' | while read -r pe; do
   NIC_ID=$(echo "$pe" | jq -r '.networkInterfaces[0].id // empty')
   PE_IP="unknown"
   if [[ -n "$NIC_ID" ]]; then
-    PE_IP=$(az network nic show --ids "$NIC_ID" \
+    PE_IP=$(run_with_timeout 20 az network nic show --ids "$NIC_ID" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
       --query "ipConfigurations[0].privateIpAddress" -o tsv 2>/dev/null || echo "unknown")
     echo "  │  Private IP: $PE_IP"
@@ -374,7 +374,7 @@ echo "$FOUND_PES" | jq -c '.[]' | while read -r pe; do
   fi
 
   # DNS zone group
-  ZONE_GROUPS=$(az network private-endpoint dns-zone-group list \
+  ZONE_GROUPS=$(run_with_timeout 20 az network private-endpoint dns-zone-group list \
     --endpoint-name "$PE_NAME" \
     --resource-group "$PE_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -396,7 +396,7 @@ echo "$FOUND_PES" | jq -c '.[]' | while read -r pe; do
   if [[ "$PE_VNET" != "unknown" && "$PE_VNET" != "$DBG_HUB_VNET_NAME" ]]; then
     echo ""
     echo "    Checking peering: $PE_VNET → $DBG_HUB_VNET_NAME"
-    PEERING_TO_HUB=$(az network vnet peering list \
+    PEERING_TO_HUB=$(run_with_timeout 25 az network vnet peering list \
       --resource-group "$PE_VNET_RG" \
       --vnet-name "$PE_VNET" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -429,7 +429,7 @@ echo "$FOUND_PES" | jq -c '.[]' | while read -r pe; do
   if [[ "$PE_SUBNET_ID" != "unknown" && "$PE_SUBNET_ID" != "null" ]]; then
     echo ""
     echo "    Checking NSG on subnet '$PE_SUBNET_NAME'..."
-    SUBNET_NSG=$(az network vnet subnet show \
+    SUBNET_NSG=$(run_with_timeout 20 az network vnet subnet show \
       --ids "$PE_SUBNET_ID" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
       --query "networkSecurityGroup.id" \
@@ -607,7 +607,7 @@ if [[ -n "$FQDN" ]]; then
   echo ""
   echo "    Via Windows Resolve-DnsName (ground truth for apps):"
   if command -v powershell.exe &>/dev/null; then
-    WIN_RESULT=$(powershell.exe -NoProfile -Command "try { (Resolve-DnsName '$FQDN' -ErrorAction Stop | Where-Object { \$_.QueryType -eq 'A' } | Select-Object -First 1).IPAddress } catch { 'ERROR' }" 2>/dev/null | tr -d '\r')
+    WIN_RESULT=$(run_with_timeout 20 powershell.exe -NoProfile -NonInteractive -Command "try { (Resolve-DnsName '$FQDN' -ErrorAction Stop | Where-Object { \$_.QueryType -eq 'A' } | Select-Object -First 1).IPAddress } catch { 'ERROR' }" 2>/dev/null | tr -d '\r')
     if [[ "$WIN_RESULT" == "ERROR" || -z "$WIN_RESULT" ]]; then
       result WARN "Windows Resolve-DnsName could not resolve $FQDN"
     elif echo "$WIN_RESULT" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'; then

@@ -59,7 +59,7 @@ print_step 1 "DINE policy assignments"
 echo "  Looking for 'Azure PaaS Private DNS Zone' policy assignments..."
 
 # These policies are assigned at subscription scope by this repo's Bicep
-DINE_POLICIES=$(az policy assignment list \
+DINE_POLICIES=$(run_with_timeout 25 az policy assignment list \
   --subscription "$DBG_SUBSCRIPTION_ID" \
   --query "[?contains(displayName, 'Azure PaaS Private DNS Zone')].{name:name, displayName:displayName, enforcementMode:enforcementMode, id:id}" \
   -o json 2>/dev/null || echo "[]")
@@ -68,7 +68,7 @@ DINE_COUNT=$(echo "$DINE_POLICIES" | jq length)
 
 if [[ "$DINE_COUNT" -eq 0 ]]; then
   # Fall back to RG-scoped check
-  DINE_POLICIES=$(az policy assignment list \
+  DINE_POLICIES=$(run_with_timeout 25 az policy assignment list \
     --resource-group "$DBG_HUB_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[?contains(displayName, 'Azure PaaS Private DNS Zone')].{name:name, displayName:displayName, enforcementMode:enforcementMode, id:id}" \
@@ -93,7 +93,7 @@ fi
 print_step 2 "Policy compliance state"
 echo "  Querying compliance for private DNS DINE policies..."
 
-NON_COMPLIANT=$(az policy state list \
+NON_COMPLIANT=$(run_with_timeout 35 az policy state list \
   --subscription "$DBG_SUBSCRIPTION_ID" \
   --filter "policyDefinitionAction eq 'deployifnotexists' and complianceState eq 'NonCompliant'" \
   --query "[?contains(policyAssignmentName, 'dns') || contains(policyAssignmentName, 'privatelink') || contains(policyAssignmentName, 'blob') || contains(policyAssignmentName, 'vault') || contains(policyAssignmentName, 'sql') || contains(policyAssignmentName, 'sites') || contains(policyAssignmentName, 'registry')].{resourceId:resourceId, policyAssignment:policyAssignmentName, complianceState:complianceState}" \
@@ -122,7 +122,7 @@ for TARGET_RG in "${TARGET_RGS[@]}"; do
   echo ""
   echo "  Scanning: $TARGET_RG"
 
-  PE_LIST=$(az network private-endpoint list \
+  PE_LIST=$(run_with_timeout 30 az network private-endpoint list \
     --resource-group "$TARGET_RG" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[].{name:name, groupIds:privateLinkServiceConnections[0].groupIds[0], resource:privateLinkServiceConnections[0].privateLinkServiceId}" \
@@ -140,7 +140,7 @@ for TARGET_RG in "${TARGET_RGS[@]}"; do
     PE_RESOURCE=$(echo "$pe" | jq -r '.resource // "unknown"' | sed 's|.*/||')
 
     # Check for DNS zone groups on this PE
-    ZONE_GROUPS=$(az network private-endpoint dns-zone-group list \
+    ZONE_GROUPS=$(run_with_timeout 20 az network private-endpoint dns-zone-group list \
       --endpoint-name "$PE_NAME" \
       --resource-group "$TARGET_RG" \
       --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -175,7 +175,7 @@ if $REMEDIATE && [[ "$NC_COUNT" -gt 0 || -f /tmp/missing-zone-groups.$$ ]]; then
     echo "$DINE_POLICIES" | jq -r '.[].id' | while read -r assignment_id; do
       ASSIGNMENT_NAME=$(echo "$assignment_id" | sed 's|.*/||')
       echo "  Triggering remediation for: $ASSIGNMENT_NAME"
-      az policy remediation create \
+      run_with_timeout 30 az policy remediation create \
         --name "remediate-${ASSIGNMENT_NAME}-$(date +%s)" \
         --policy-assignment "$assignment_id" \
         --subscription "$DBG_SUBSCRIPTION_ID" \

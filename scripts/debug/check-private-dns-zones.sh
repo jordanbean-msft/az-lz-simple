@@ -35,7 +35,7 @@ print_step 1 "Private DNS zones in $DBG_HUB_RG"
 # Check if cached zones exist in config
 CACHED_ZONES=$(jq -r '.privateDnsZones // [] | length' "$REPO_ROOT/.azure-debug-config.json")
 
-ZONES=$(az network private-dns zone list \
+ZONES=$(run_with_timeout 30 az network private-dns zone list \
   --resource-group "$DBG_HUB_RG" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
   --query "[].{name:name, numberOfRecordSets:numberOfRecordSets, numberOfVirtualNetworkLinks:numberOfVirtualNetworkLinks}" \
@@ -62,7 +62,7 @@ print_step 2 "VNet link verification"
 
 check_zone_links() {
   local zone_name="$1"
-  LINKS=$(az network private-dns link vnet list \
+  LINKS=$(run_with_timeout 20 az network private-dns link vnet list \
     --resource-group "$DBG_HUB_RG" \
     --zone-name "$zone_name" \
     --subscription "$DBG_SUBSCRIPTION_ID" \
@@ -111,7 +111,7 @@ elif [[ "$ZONE_FILTER" == "--check-records" ]]; then
     if [[ "$SHORTNAME" != "$HOSTNAME" ]]; then
       echo ""
       echo "  Zone: $zone → Record name: $SHORTNAME"
-      RECORDS=$(az network private-dns record-set a show \
+      RECORDS=$(run_with_timeout 20 az network private-dns record-set a show \
         --resource-group "$DBG_HUB_RG" \
         --zone-name "$zone" \
         --name "$SHORTNAME" \
@@ -138,7 +138,7 @@ fi
 
 # 3. Check Azure Policy for DNS zone creation
 print_step 3 "Azure Policy assignments for DNS zones"
-POLICY_ASSIGNMENTS=$(az policy assignment list \
+POLICY_ASSIGNMENTS=$(run_with_timeout 25 az policy assignment list \
   --resource-group "$DBG_HUB_RG" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
   --query "[?contains(displayName, 'dns') || contains(displayName, 'DNS') || contains(displayName, 'private')].{name:name, displayName:displayName, enforcementMode:enforcementMode}" \
@@ -152,7 +152,7 @@ if [[ "$PA_COUNT" -gt 0 ]]; then
 else
   result WARN "No DNS-related policy assignments found in $DBG_HUB_RG"
   echo "         → Policy assignments may be at subscription scope. Checking..."
-  SUB_POLICIES=$(az policy assignment list \
+  SUB_POLICIES=$(run_with_timeout 25 az policy assignment list \
     --subscription "$DBG_SUBSCRIPTION_ID" \
     --query "[?contains(displayName, 'dns') || contains(displayName, 'DNS') || contains(displayName, 'private')].{name:name, displayName:displayName}" \
     -o json 2>/dev/null || echo "[]")

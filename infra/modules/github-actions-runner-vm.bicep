@@ -83,30 +83,42 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
     hardwareProfile: {
       vmSize: vmSize
     }
-    osProfile: {
-      computerName: resolvedVmName
-      adminUsername: adminUsername
-      customData: base64(customData)
-      linuxConfiguration: {
-        disablePasswordAuthentication: true
-        provisionVMAgent: true
-        patchSettings: {
-          patchMode: 'AutomaticByPlatform'
-          assessmentMode: 'AutomaticByPlatform'
-          automaticByPlatformSettings: {
-            bypassPlatformSafetyChecksOnUserSchedule: true
-          }
-        }
-        ssh: {
-          publicKeys: [
-            {
-              keyData: adminPublicKey
-              path: '/home/${adminUsername}/.ssh/authorized_keys'
+    osProfile: union(
+      {
+        computerName: resolvedVmName
+        adminUsername: adminUsername
+        linuxConfiguration: union(
+          {
+            disablePasswordAuthentication: true
+            provisionVMAgent: true
+            patchSettings: {
+              patchMode: 'AutomaticByPlatform'
+              assessmentMode: 'AutomaticByPlatform'
+              automaticByPlatformSettings: {
+                bypassPlatformSafetyChecksOnUserSchedule: true
+              }
             }
-          ]
-        }
-      }
-    }
+          },
+          // Only set SSH for new VMs (when vmName is empty)
+          // Existing VMs cannot have SSH keys modified in-place (PropertyChangeNotAllowed)
+          empty(vmName)
+            ? {
+                ssh: {
+                  publicKeys: [
+                    {
+                      keyData: adminPublicKey
+                      path: '/home/${adminUsername}/.ssh/authorized_keys'
+                    }
+                  ]
+                }
+              }
+            : {}
+        )
+      },
+      // Only set customData for new VMs (when vmName is empty)
+      // Existing VMs cannot have customData modified in-place (PropertyChangeNotAllowed)
+      empty(vmName) ? { customData: base64(customData) } : {}
+    )
     storageProfile: {
       imageReference: {
         publisher: publisher
@@ -120,7 +132,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
         deleteOption: 'Delete'
         diskSizeGB: diskSizeGB
         managedDisk: {
-          storageAccountType: 'StandardSSD_LRS'
+          storageAccountType: 'Standard_LRS'
         }
       }
     }

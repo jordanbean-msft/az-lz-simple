@@ -30,9 +30,9 @@ WARN=0
 result() {
   local status="$1" msg="$2"
   case "$status" in
-    PASS) echo "  ✅ $msg"; ((PASS++)) ;;
-    FAIL) echo "  ❌ $msg"; ((FAIL++)) ;;
-    WARN) echo "  ⚠️  $msg"; ((WARN++)) ;;
+    PASS) echo "  ✅ $msg"; PASS=$((PASS + 1)) ;;
+    FAIL) echo "  ❌ $msg"; FAIL=$((FAIL + 1)) ;;
+    WARN) echo "  ⚠️  $msg"; WARN=$((WARN + 1)) ;;
   esac
 }
 
@@ -82,6 +82,17 @@ check_help() {
       exit 0
     fi
   done
+}
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+
+  if command -v timeout &>/dev/null; then
+    timeout "$seconds" "$@"
+  else
+    "$@"
+  fi
 }
 
 # ─── Config loading ────────────────────────────────────────────────

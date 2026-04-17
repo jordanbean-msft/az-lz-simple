@@ -29,6 +29,19 @@ module privateEndpointNetworkSecurityGroup 'br/public:avm/res/network/network-se
         }
       }
       {
+        name: 'AllowSqlInbound'
+        properties: {
+          access: 'Allow'
+          direction: 'Inbound'
+          priority: 110
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: privateEndpointSubnetAddressPrefix
+          destinationPortRanges: ['1433']
+        }
+      }
+      {
         name: 'DenyAllInbound'
         properties: {
           access: 'Deny'
@@ -140,6 +153,19 @@ module vmNetworkSecurityGroup 'br/public:avm/res/network/network-security-group:
           sourcePortRange: '*'
           destinationAddressPrefix: '10.0.0.0/8'
           destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'AllowSqlOutboundToPeeredVnets'
+        properties: {
+          access: 'Allow'
+          direction: 'Outbound'
+          priority: 106
+          protocol: 'Tcp'
+          sourceAddressPrefix: vmSubnetAddressPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: '10.0.0.0/8'
+          destinationPortRanges: ['1433']
         }
       }
       {
