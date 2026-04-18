@@ -154,19 +154,49 @@ Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-confi
 
 ### Diagnostic scripts
 
-| Script                       | VS Code Task                     | What it checks                                                                                                                                    |
-| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `trace-resource.sh`          | Debug: Trace resource networking | Full chain from resource ID: PE → NIC/IP → VNet → peering → NSG → DNS → TCP. Use when you have a resource ID                                      |
-| `diagnose-all.sh`            | Debug: Run all diagnostics       | Runs all checks in sequence. Use `--all` to scan all spoke RGs for PEs                                                                            |
-| `check-vpn.sh`               | Debug: Check VPN connection      | VPN routes, hub reachability, gateway health, Windows VPN adapter                                                                                 |
-| `check-dns.sh`               | Debug: Check DNS resolution      | DNS server reachability, resolution of hostnames, privatelink CNAME chain                                                                         |
-| `check-dns-server.sh`        | Debug: Check DNS server VM       | VM power state, CoreDNS port 53, resolution test. Use `--restart` to start a stopped VM                                                           |
-| `check-peerings.sh`          | Debug: Check VNet peerings       | Hub peerings, spoke→hub reverse peerings, gateway transit settings                                                                                |
-| `check-private-dns-zones.sh` | Debug: Check private DNS zones   | Zone existence, VNet links, A records, Azure Policy assignments                                                                                   |
-| `check-private-endpoints.sh` | Debug: Check private endpoints   | PE connection status, DNS zone groups, NIC IPs, DNS cross-check. Use `--all` for all RGs, `--hostname` to find by FQDN                            |
-| `check-dns-policy.sh`        | Debug: Check DNS DINE policy     | Verify DINE policies created DNS zone groups on PEs. Use `--remediate` to trigger Azure Policy remediation                                        |
-| `check-nsg.sh`               | Debug: Check NSG rules           | NSG rules on hub/spoke subnets, effective rules per NIC, orphaned NSGs, unprotected subnets. Use `--all` for all RGs, `--nic` for effective rules |
-| `manage-vm.sh`               | VM: DNS/GHA tasks                | Start, stop, restart, or check status of DNS server and GHA runner VMs                                                                            |
+| Script                       | VS Code Task                          | What it checks                                                                                                                                    |
+| ---------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trace-resource.sh`          | Debug: Trace resource networking      | Full chain from resource ID: PE → NIC/IP → VNet → peering → NSG → DNS → TCP. Use when you have a resource ID                                      |
+| `diagnose-all.sh`            | Debug: Run all diagnostics            | Runs all checks in sequence. Use `--all` to scan all spoke RGs for PEs                                                                            |
+| `check-vpn.sh`               | Debug: Check VPN connection           | VPN routes, hub reachability, gateway health, Windows VPN adapter                                                                                 |
+| `check-dns.sh`               | Debug: Check DNS resolution           | DNS server reachability, resolution of hostnames, privatelink CNAME chain                                                                         |
+| `check-dns-server.sh`        | Debug: Check DNS server VM            | VM power state, CoreDNS port 53, resolution test. Use `--restart` to start a stopped VM                                                           |
+| `check-gha-runner.sh`        | Debug: Check GitHub Actions runner VM | VM power state, GitHub egress, runner repo target, and runner service health                                                                      |
+| `check-peerings.sh`          | Debug: Check VNet peerings            | Hub peerings, spoke→hub reverse peerings, gateway transit settings                                                                                |
+| `check-private-dns-zones.sh` | Debug: Check private DNS zones        | Zone existence, VNet links, A records, Azure Policy assignments                                                                                   |
+| `check-private-endpoints.sh` | Debug: Check private endpoints        | PE connection status, DNS zone groups, NIC IPs, DNS cross-check. Use `--all` for all RGs, `--hostname` to find by FQDN                            |
+| `check-dns-policy.sh`        | Debug: Check DNS DINE policy          | Verify DINE policies created DNS zone groups on PEs. Use `--remediate` to trigger Azure Policy remediation                                        |
+| `check-nsg.sh`               | Debug: Check NSG rules                | NSG rules on hub/spoke subnets, effective rules per NIC, orphaned NSGs, unprotected subnets. Use `--all` for all RGs, `--nic` for effective rules |
+| `manage-vm.sh`               | VM: DNS/GHA tasks                     | Start, stop, restart, or check status of DNS server and GHA runner VMs                                                                            |
+
+### VM-specific troubleshooting steps
+
+When the issue is clearly tied to one of the hub VMs, use these shorter playbooks before running every network script.
+
+#### GitHub Actions runner VM
+
+Use this sequence when a self-hosted workflow stays queued, the runner looks offline, or a workflow that needs private network access never starts:
+
+1. Check power state: `./scripts/debug/manage-vm.sh status gha-runner`
+2. Start the VM if needed: `./scripts/debug/manage-vm.sh start gha-runner`
+3. Run `./scripts/debug/check-gha-runner.sh`
+4. If GitHub is unreachable, verify the runner NIC still has its public IP attached or that subnet egress is provided by NAT.
+5. If network is healthy, check whether the workflow labels match the default runner labels: `self-hosted`, `Linux`, `X64`.
+6. If re-registration is needed, use `./scripts/debug/retarget-gha-runner.sh` with a valid GitHub PAT.
+
+#### DNS resolver VM
+
+Use this sequence when DNS times out, private names resolve publicly, or Windows and WSL report different answers:
+
+1. Check power state: `./scripts/debug/manage-vm.sh status dns`
+2. Start the VM if needed: `./scripts/debug/manage-vm.sh start dns`
+3. Validate the resolver path:
+
+- `./scripts/debug/check-dns-server.sh`
+- `./scripts/debug/check-dns.sh <hostname>`
+
+4. If direct queries to the DNS VM succeed but Windows resolution fails, fix the VPN DNS configuration or refresh WSL after reconnect.
+5. If both direct and Windows-side queries fail, inspect the CoreDNS container with `az vm run-command invoke`, then verify private DNS zones and DINE policy with `check-private-dns-zones.sh` and `check-dns-policy.sh --all`.
 
 ### Common failure scenarios and resolution
 
@@ -178,6 +208,8 @@ Sync runs automatically (>1 hour TTL) or manually via `./scripts/ipam/sync-confi
 6. **Private endpoint created but not resolving**: DINE policy hasn't created DNS zone group yet → `check-dns-policy.sh --all --remediate`
 7. **New resource deployed but A record missing**: DINE policy needs time (15-30 min) or remediation → `check-dns-policy.sh --remediate`
 8. **TCP connection fails despite correct DNS**: NSG on PE subnet or spoke subnet blocking traffic → `check-nsg.sh --all`, check effective rules with `check-nsg.sh --nic`
+9. **GitHub workflow stays queued on the self-hosted runner**: Runner VM stopped, runner lost GitHub egress, or workflow labels do not match → `manage-vm.sh status gha-runner`, `az network watcher test-connectivity`, then inspect the runner service
+10. **DNS scripts fail even though private endpoints look correct**: DNS VM stopped, CoreDNS not listening, or Windows VPN DNS settings drifted → `manage-vm.sh status dns`, `check-dns-server.sh`, then compare `Resolve-DnsName` with direct `nslookup`
 
 ## Custom Copilot Agents
 

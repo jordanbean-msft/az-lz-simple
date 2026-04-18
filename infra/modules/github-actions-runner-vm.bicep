@@ -50,8 +50,15 @@ param nicName string = ''
 @description('Primary IP configuration name for the NIC.')
 param ipConfigurationName string = 'ipconfig01'
 
+@description('Optional existing public IP address name to attach to the VM NIC.')
+param publicIpAddressName string = ''
+
 var resolvedVmName = empty(vmName) ? '${abbrs.computeVirtualMachines}${resourceToken}' : vmName
 var resolvedNicName = empty(nicName) ? '${abbrs.networkNetworkInterfaces}${resourceToken}' : nicName
+
+resource publicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' existing = if (!empty(publicIpAddressName)) {
+  name: publicIpAddressName
+}
 
 resource nic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   name: resolvedNicName
@@ -66,6 +73,11 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
           }
           privateIPAddress: privateIPAddress
           privateIPAllocationMethod: 'Static'
+          publicIPAddress: empty(publicIpAddressName)
+            ? null
+            : {
+                id: publicIp.id
+              }
         }
       }
     ]

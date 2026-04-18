@@ -253,6 +253,14 @@
       "problemMatcher": []
     },
     {
+      "label": "Debug: Check GitHub Actions runner VM",
+      "type": "shell",
+      "command": "./scripts/debug/check-gha-runner.sh",
+      "group": "test",
+      "detail": "Check the GitHub Actions runner VM status, GitHub egress, and runner service health",
+      "problemMatcher": []
+    },
+    {
       "label": "Debug: Restart DNS server VM",
       "type": "shell",
       "command": "./scripts/debug/check-dns-server.sh --restart",

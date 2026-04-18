@@ -95,6 +95,7 @@
         "vmName": "vm-central-ghar",
         "nicName": "vm-central-ghar471",
         "ipConfigurationName": "ipconfig1",
+        "publicIpAddressName": "vm-central-ghar-ip",
         "adminUsername": "azureuser"
       }
     }

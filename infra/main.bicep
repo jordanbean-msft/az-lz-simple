@@ -61,6 +61,7 @@ param githubActionsRunnerVm object = {
   vmName: ''
   nicName: ''
   ipConfigurationName: 'ipconfig01'
+  publicIpAddressName: ''
   // Optional: override adminUsername per-VM to match an existing deployed VM.
   // Leave empty to inherit the shared adminUsername parameter.
   adminUsername: ''
@@ -157,7 +158,9 @@ module githubActionsRunnerDeployment './modules/github-actions-runner-vm.bicep' 
     subnetResourceId: virtualNetworkDeployment.outputs.vmSubnetResourceId
     resourceToken: '-gha-${resourceToken}'
     abbrs: abbrs
-    adminUsername: empty(githubActionsRunnerVm.?adminUsername ?? '') ? adminUsername : githubActionsRunnerVm.adminUsername
+    adminUsername: empty(githubActionsRunnerVm.?adminUsername ?? '')
+      ? adminUsername
+      : githubActionsRunnerVm.adminUsername
     adminPublicKey: githubActionsAdminPublicKey
     customData: githubActionsRunnerCloudInit
     publisher: githubActionsRunnerVm.publisher
@@ -170,6 +173,7 @@ module githubActionsRunnerDeployment './modules/github-actions-runner-vm.bicep' 
     vmName: githubActionsRunnerVm.vmName
     nicName: githubActionsRunnerVm.nicName
     ipConfigurationName: githubActionsRunnerVm.ipConfigurationName
+    publicIpAddressName: githubActionsRunnerVm.publicIpAddressName
   }
 }
 
