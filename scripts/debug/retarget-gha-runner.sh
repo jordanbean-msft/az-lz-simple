@@ -335,7 +335,33 @@ fi
 
 result PASS "Runner VM re-registered to ${TARGET_REPO_PATH}" || true
 
-print_step 3 "Persisting repo URL in azd environment"
+print_step 3 "Verifying runner is online in GitHub"
+
+ONLINE_STATUS=$(curl -fsSL -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer ${PAT_INPUT}" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/${TARGET_REPO_PATH}/actions/runners?per_page=100" \
+  | jq -r --arg expected_name "$RUNNER_VM_NAME" \
+      '.runners[]? | select(.name == $expected_name) | .status' \
+  | head -n 1)
+
+if [[ "$ONLINE_STATUS" != "online" ]]; then
+  result FAIL "Runner is not online in GitHub after retarget" || true
+  echo ""
+  echo "Expected runner name: $RUNNER_VM_NAME"
+  echo "Observed status: ${ONLINE_STATUS:-<not-found>}"
+  echo "Target repo: $TARGET_REPO_URL"
+  echo ""
+  echo "Most common causes:"
+  echo "  1) PAT lacks repo self-hosted runner admin permission"
+  echo "  2) Runner service failed to start on VM"
+  echo "  3) GitHub API rate limit or transient API failure"
+  print_summary
+fi
+
+result PASS "Runner is online in GitHub for ${TARGET_REPO_PATH}" || true
+
+print_step 4 "Persisting repo URL in azd environment"
 if [[ "$UPDATE_AZD_ENV" -eq 1 ]]; then
   if azd env set AZURE_GITHUB_REPO_URL "$TARGET_REPO_URL" >/dev/null 2>&1; then
     result PASS "Updated azd env var AZURE_GITHUB_REPO_URL" || true
@@ -346,7 +372,7 @@ else
   result WARN "Skipped azd env update (--no-azd-update)" || true
 fi
 
-print_step 4 "Verification commands"
+print_step 5 "Verification commands"
 echo "  Check runner service logs on VM:"
 echo "    az vm run-command invoke -g '$DBG_HUB_RG' -n '$RUNNER_VM_NAME' --subscription '$DBG_SUBSCRIPTION_ID' --command-id RunShellScript --scripts \"svc=\\\$(cat /root/actions-runner/.service); journalctl -u \\\$svc -n 100 --no-pager\" --query 'value[0].message' -o tsv"
 

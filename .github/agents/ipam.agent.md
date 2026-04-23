@@ -148,7 +148,7 @@ Ask the user for:
 - **Spoke name** — a short identifier (e.g. "data-platform", "web-app")
 - **Resource group name** — user-specified target RG for the spoke deployment
 - **Region** — user-selected location for the spoke. Cross-region spokes are supported (see notes below).
-- **Workload and service requirements** — this drives subnet planning. Ask specifically: VMs, AKS, App Service, Container Apps, databases, private endpoints, Bastion, Application Gateway, Firewall, Route Server, and any delegation needs.
+- **Workload and service requirements** — this drives subnet planning. Ask specifically: VMs, AKS, App Service, Container Apps, databases, private endpoints, Bastion, Application Gateway, Firewall, Route Server, and any delegation needs. For Container Apps, assume workload profile mode by default unless the user explicitly requests consumption-only environments.
 - **Whether to create the resource group** if it does not already exist
 
 Do NOT ask the user to provide VNet or subnet CIDR ranges directly unless they explicitly request to override recommendations.
@@ -167,16 +167,31 @@ Azure supports **global VNet peering** — spokes do NOT have to be in the same 
 
 **Recommendation:** Default to the hub's region unless the user has a specific reason for a different region (e.g., data residency, proximity to end users, service availability). If they choose a cross-region spoke, confirm they understand the cost and latency tradeoffs.
 
-### Step 2: Discover available address space
+### Step 2: Discover available address space and right-size
 
-Run `./scripts/ipam/discover-address-space.sh` to find unused CIDR blocks. Present the suggestions to the user. Always validate that the suggested range does not overlap with any existing VNet before proceeding.
+Run `./scripts/ipam/discover-address-space.sh` to scan for unused CIDR blocks. The script suggests available ranges, but **do not automatically pick the first suggestion or default to /16 blocks**.
+
+Instead:
+
+1. Use discovery to find available ranges in the right prefix length for your workload
+2. Run with `--prefix 24` or `--prefix 25` if you have a compact workload (e.g., Container Apps + Foundry + private endpoints)
+3. Validate that the suggested range does not overlap with any existing VNet before proceeding
+4. Confirm the prefix length matches your actual subnet requirements before advancing to Step 3
+
+Example: for a Container Apps workload profile + Foundry agent + private endpoints, run:
+
+```bash
+./scripts/ipam/discover-address-space.sh --prefix 24
+```
+
+This returns available /24 blocks, avoiding over-allocation to /16.
 
 ### Step 3: Design the subnet and CIDR plan from workloads
 
 Use workload requirements and Microsoft Learn minimums/recommendations to calculate:
 
-1. Recommended VNet CIDR
-2. Recommended subnet names and CIDRs
+1. Recommended subnet names and CIDRs (right-sized, not over-allocated)
+2. Minimum required VNet CIDR based on subnet totals
 3. Any required exact subnet names
 4. Any required subnet delegations
 
@@ -185,6 +200,18 @@ Use this guidance order:
 1. Microsoft hard minimums first
 2. Demo/minimal sizing preference for this repo unless user requests production scale
 3. Non-overlap with hub, VPN pool, and existing spokes
+
+#### Right-Sizing VNet Address Space
+
+**Do NOT default to /16.** Calculate the minimum VNet CIDR needed for the specific workload:
+
+1. Sum all subnet bits: e.g., container-apps /27 + private-endpoint /27 + foundry-agent /26 = 27 + 27 + 59 = 113 IPs
+2. Find minimum VNet prefix that contains all subnets. For 113 IPs, a /25 (128 IPs) fits; /24 (256 IPs) provides headroom for future growth
+3. Prefer right-sized CIDRs that avoid over-allocation:
+   - **Single service workload**: /28 or /27 often sufficient
+   - **Container Apps + Foundry + PEs**: /24 or /25
+   - **Multi-service (AKS, App Gateway, multiple data services)**: /23 only if needed
+4. **Never** allocate a /16 unless the user explicitly requests it or has a specific architectural reason (e.g., plans for 50+ subnets)
 
 Present computed ranges to the user and request explicit confirmation before any dry run or provisioning.
 
@@ -214,6 +241,8 @@ Before running the dry run, run `./scripts/ipam/validate-cidr-plan.sh` and valid
 
 The table below lists **minimum supported** and **production-recommended** sizes for each service. This landing zone is used for **demo/sample workloads**, so **prefer the minimum supported size** to conserve address space unless the user explicitly asks for production scale.
 
+For Azure Container Apps, default to workload profile environments and right-size subnets. Do not propose /23 unless the user explicitly asks for a consumption-only environment.
+
 | Azure Service / Workload                    | Required Subnet Name                                                   | Min Supported     | Production Rec. | Why                                                                | Reference                                                                                                                             |
 | ------------------------------------------- | ---------------------------------------------------------------------- | ----------------- | --------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | General compute (VMs)                       | any name                                                               | /29 (3 IPs)       | /24             | /29 fits 1-3 VMs for demos                                         | [VNet planning](https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm)                               |
@@ -226,7 +255,8 @@ The table below lists **minimum supported** and **production-recommended** sizes
 | Azure Firewall                              | **AzureFirewallSubnet** (exact name required)                          | /26 (59 IPs)      | /26             | /26 is the Azure hard minimum                                      | [Firewall FAQ](https://learn.microsoft.com/azure/firewall/firewall-faq#why-does-azure-firewall-need-a--26-subnet-size)                |
 | Azure Firewall Management                   | **AzureFirewallManagementSubnet** (exact name)                         | /26 (59 IPs)      | /26             | Required for forced tunneling                                      | [Firewall forced tunnel](https://learn.microsoft.com/azure/firewall/forced-tunneling)                                                 |
 | App Service / Functions VNet Integration    | any name (dedicated, delegated to `Microsoft.Web/serverFarms`)         | /27 (27 IPs)      | /24             | One IP per plan instance; /27 fits small demos                     | [App Service VNet](https://learn.microsoft.com/azure/app-service/overview-vnet-integration)                                           |
-| Azure Container Apps                        | any name (delegated to `Microsoft.App/environments`)                   | /23 (507 IPs)     | /23             | /23 is the Azure hard minimum                                      | [ACA networking](https://learn.microsoft.com/azure/container-apps/networking)                                                         |
+| Azure Container Apps (workload profile)     | any name (delegated to `Microsoft.App/environments`)                   | /27 (27 IPs)      | /26             | Workload profile environments support smaller, right-sized subnets | [ACA networking](https://learn.microsoft.com/azure/container-apps/networking)                                                         |
+| Azure Container Apps (consumption-only)     | any name (delegated to `Microsoft.App/environments`)                   | /23 (507 IPs)     | /23             | /23 remains the minimum for consumption-only environments          | [ACA networking](https://learn.microsoft.com/azure/container-apps/networking)                                                         |
 | Azure AI Foundry Agent Service              | any name (delegated to `Microsoft.App/environments`)                   | /26 (59 IPs)      | /24             | Agent containers injected; /26 for demos, /24 for scale            | [Foundry Agent networking](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks)                                  |
 | Azure Machine Learning / AI Foundry compute | any name (delegated to `Microsoft.MachineLearningServices/workspaces`) | /27 (27 IPs)      | /24             | /27 fits a small training cluster                                  | [AML managed VNet](https://learn.microsoft.com/azure/machine-learning/how-to-enable-managed-vnet)                                     |
 | Azure Databricks                            | Two dedicated subnets (host + container), any names                    | /26 each (59 IPs) | /24 each        | /26 is the Azure minimum per subnet                                | [Databricks VNet injection](https://learn.microsoft.com/azure/databricks/administration-guide/cloud-configurations/azure/vnet-inject) |
@@ -456,8 +486,11 @@ When removing a spoke:
 ## Communication Style
 
 - **CIDR validation must be scripted.** Before presenting any plan, run `./scripts/ipam/validate-cidr-plan.sh` so subnet boundary alignment, overlap detection, containment, and existing-range conflicts are checked consistently. If validation fails, fix the plan before showing it to the user.
+- **Right-size VNet address space.** Never default to /16. Calculate minimum VNet size based on actual subnet requirements. For compact workloads (Container Apps workload profile + Foundry + PEs), a /24 or /25 is appropriate. Only recommend /16 if the user has a specific architectural need (e.g., 30+ planned subnets) or explicitly requests it.
 - Always do a dry run before real provisioning.
 - Present address plans as tables. Include a "Usable IPs" column and a note on remaining unallocated space.
+- Default Container Apps planning to workload profile subnet sizing. Avoid broad /23 allocations unless the user explicitly requests consumption-only Container Apps.
 - When the user describes workloads, proactively recommend subnets they might not have thought of (e.g., "You mentioned AKS — do you also need an Application Gateway subnet for ingress?").
 - After any change, verify with the appropriate list/check command.
+- If the user questions a broad CIDR recommendation (e.g., /16 when only /24 is needed), immediately recalculate and propose a right-sized alternative.
 - If the user asks for a size that's too small for the service (e.g., /28 for App Gateway), explain the Microsoft minimum and recommend the correct size.
