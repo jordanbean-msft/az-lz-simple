@@ -397,11 +397,11 @@
       "problemMatcher": []
     },
     {
-      "label": "VM: GHA Runner — Retarget Repo",
+      "label": "VM: GHA Runner — Update to Repo",
       "type": "shell",
-      "command": "./scripts/debug/retarget-gha-runner.sh --repo-url '${input:ghaRunnerRepoUrl}'",
+      "command": "./scripts/debug/update-gha-runner.sh '${input:ghaRunnerRepoUrl}'",
       "group": "none",
-      "detail": "Re-register the GitHub Actions runner VM to a different GitHub repository",
+      "detail": "Fully automated: discover VM config, resolve PAT from azd/gh CLI, reconfigure runner, verify online. Supports: --pat TOKEN --vm-name NAME --no-azd-update",
       "problemMatcher": []
     }
   ]

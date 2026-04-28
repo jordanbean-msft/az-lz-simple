@@ -182,7 +182,40 @@ Use this sequence when a self-hosted workflow stays queued, the runner looks off
 3. Run `./scripts/debug/check-gha-runner.sh`
 4. If GitHub is unreachable, verify the runner NIC still has its public IP attached or that subnet egress is provided by NAT.
 5. If network is healthy, check whether the workflow labels match the default runner labels: `self-hosted`, `Linux`, `X64`.
-6. If re-registration is needed, use `./scripts/debug/retarget-gha-runner.sh` with a valid GitHub PAT.
+6. **To change the repository the runner points to**, use: `./scripts/debug/update-gha-runner.sh https://github.com/owner/repo`
+
+**Updating Runner Repository (Fully Automated)**
+
+The new `update-gha-runner.sh` script automates the entire re-registration process:
+
+```bash
+# Simplest usage — auto-discovers VM, generates PAT, reconfigures runner
+./scripts/debug/update-gha-runner.sh https://github.com/jordanbean-msft/my-repo
+
+# Or use the VS Code task:
+# Tasks → Run Task → VM: GHA Runner — Update to Repo
+```
+
+**What it does automatically:**
+- ✅ Discovers runner VM name from `.azure-debug-config.json`
+- ✅ Confirms runner path on VM (`/home/azureuser/actions-runner`)
+- ✅ Ensures VM is running, starts if needed
+- ✅ Uses `gh CLI` to obtain GitHub authentication token (if available)
+- ✅ Stops old runner service and unregisters from old repo
+- ✅ Requests new registration token from GitHub
+- ✅ Configures runner for new repo
+- ✅ Installs and starts systemd service
+- ✅ Verifies runner is ONLINE in new repo
+- ✅ Updates azd env var `AZURE_GITHUB_REPO_URL`
+
+**Troubleshooting:**
+- If `gh CLI` auth fails, the script will prompt for a PAT manually
+- You can pre-set the PAT: `GITHUB_PAT=ghp_xxx ./scripts/debug/update-gha-runner.sh https://github.com/owner/repo`
+- For detailed logging during reconfiguration, check: `./scripts/debug/update-gha-runner.sh --help`
+
+**Legacy option** (manual steps, not recommended):
+- Old script: `./scripts/debug/retarget-gha-runner.sh --repo-url https://github.com/owner/repo --pat YOUR_PAT`
+
 
 #### DNS resolver VM
 
