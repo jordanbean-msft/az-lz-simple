@@ -169,14 +169,14 @@ fi
 result PASS "Discovered runner VM: $RUNNER_VM_NAME" || true
 
 # Verify runner path exists on VM
-RUNNER_PATH_CHECK=$(run_with_timeout 30 az vm run-command invoke \
+RUNNER_PATH_CHECK=$(az vm run-command invoke \
   --resource-group "$DBG_HUB_RG" \
   --name "$RUNNER_VM_NAME" \
   --subscription "$DBG_SUBSCRIPTION_ID" \
   --command-id RunShellScript \
   --scripts "test -d $RUNNER_PATH && echo 'OK' || echo 'NOT_FOUND'" \
   --query "value[0].message" \
-  -o tsv 2>/dev/null | tr -d '[:space:]' || echo "")
+  -o tsv 2>/dev/null | grep -oE '(OK|NOT_FOUND)' | tail -1 || echo "")
 
 if [[ "$RUNNER_PATH_CHECK" != "OK" ]]; then
   result FAIL "Runner directory not found at $RUNNER_PATH on $RUNNER_VM_NAME" || true
