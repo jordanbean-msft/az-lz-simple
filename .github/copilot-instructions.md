@@ -288,3 +288,26 @@ Before running `azd up`, `azd provision`, or any deployment command:
 2. Report the output to the user with clear descriptions of what will be created, modified, or deleted
 3. Wait for explicit user approval before proceeding with deployment
 4. If the preview shows resource deletions, ask the user whether this is intentional
+
+## Package Management
+
+### New Package Lookup
+
+**ALWAYS look up the latest package information on the internet whenever a new package is added to a project.**
+
+When adding a new package (dependency, module, library, tool, etc.):
+
+1. **Search for the package** using web search or package registry lookup (e.g., npm, PyPI, NuGet, Maven, etc.)
+2. **Verify latest version** - Check the official package registry for the most recent stable release
+3. **Review package documentation** - Visit the official repository or documentation to understand:
+   - Purpose and features of the package
+   - Installation requirements and compatibility
+   - Configuration options
+   - Known issues or deprecated versions to avoid
+4. **Check for security advisories** - Look for any reported vulnerabilities or security warnings
+5. **Verify compatibility** - Ensure the package is compatible with:
+   - The project's runtime/framework version
+   - Other existing dependencies
+   - The target platform (OS, architecture)
+
+This practice ensures we use current, secure, and compatible packages rather than relying on potentially outdated information.
