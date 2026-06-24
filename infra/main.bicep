@@ -42,10 +42,10 @@ param githubActionsAdminPublicKey string = ''
 param dnsResolverVm object = {
   diskSizeGB: 30
   publisher: 'Canonical'
-  offer: 'ubuntu-24_04-lts'
-  sku: 'server'
+  offer: '0001-com-ubuntu-server-jammy'
+  sku: '22_04-lts'
   version: 'latest'
-  vmSize: 'Standard_B2ts_v2'
+  vmSize: 'Standard_B1ms'
   privateIPAddress: '10.255.1.4'
 }
 
@@ -55,7 +55,7 @@ param githubActionsRunnerVm object = {
   offer: 'ubuntu-24_04-lts'
   sku: 'server'
   version: 'latest'
-  vmSize: 'Standard_D8ds_v4'
+  vmSize: 'Standard_D2ls_v5'
   diskSizeGB: 1024
   privateIPAddress: '10.255.1.5'
   vmName: ''

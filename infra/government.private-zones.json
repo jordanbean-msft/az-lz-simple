@@ -423,12 +423,18 @@
     {
       "resource": "Microsoft PowerBI",
       "privateLinkResourceType": "Microsoft.PowerBI/privateLinkServicesForPowerBI",
-      "subresource": "privatelink.analysis.windows.net",
+      "subresource": "tenant",
       "privateDnsZoneName": [
         "privatelink.analysis.usgovcloudapi.net",
         "privatelink.pbidedicated.usgovcloudapi.net",
-        "privatelink.tip1.powerquery.microsoft.us"
+        "privatelink.prod.powerquery.microsoft.us"
       ]
+    },
+    {
+      "resource": "Microsoft Fabric",
+      "privateLinkResourceType": "Microsoft.Fabric/privateLinkServicesForFabric",
+      "subresource": "tenant",
+      "privateDnsZoneName": ["privatelink.fabric.microsoft.us"]
     },
     {
       "resource": "Azure Bot Service",
