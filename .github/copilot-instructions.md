@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository deploys a **hub-spoke Azure landing zone** using **Azure Bicep** and **Azure Developer CLI (azd)**. It provisions a hub virtual network with a VPN gateway, DNS resolver VM, GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, and supporting infrastructure (Log Analytics, Storage Account with private endpoint, Logic Apps for compute scheduling).
+This repository deploys a **hub-spoke Azure landing zone** using **Azure Bicep** and **Azure Developer CLI (azd)**. It provisions a hub virtual network with a VPN gateway, DNS resolver VM, GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, a Network Security Perimeter protecting the Terraform-state storage account, and supporting infrastructure (Log Analytics, private endpoint, Logic Apps for compute scheduling).
 
 ## Repository Structure
 
@@ -66,7 +66,9 @@ azure.yaml                      # Azure Developer CLI configuration
 ### Security
 
 - VMs use `TrustedLaunch` security profile with Secure Boot and vTPM enabled.
-- Storage accounts disable public network access and use private endpoints.
+- The Terraform-state storage account uses `publicNetworkAccess: 'SecuredByPerimeter'`, an enforced Network Security Perimeter association, and a private endpoint.
+- NSP inbound access rules are sourced from the `AZURE_ALLOWED_INBOUND_IP_ADDRESSES` azd environment variable as comma-separated `/32` CIDRs; do not check these IPs into source control.
+- NSP association mode defaults to `Enforced`; `Learning` is only a temporary transition mode.
 - VPN Gateway uses Microsoft Entra ID (AAD) authentication.
 
 ### Private DNS

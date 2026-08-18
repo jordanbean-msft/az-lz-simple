@@ -82,6 +82,7 @@
     "networkNatGateways": "ng-",
     "networkNetworkInterfaces": "nic-",
     "networkNetworkSecurityGroups": "nsg-",
+    "networkNetworkSecurityPerimeters": "nsp-",
     "networkNetworkSecurityGroupsSecurityRules": "nsgsr-",
     "networkNetworkWatchers": "nw-",
     "networkPrivateDnsZones": "pdnsz-",

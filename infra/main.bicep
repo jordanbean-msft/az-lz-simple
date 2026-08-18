@@ -23,6 +23,13 @@ param customRoutesAddressPrefixes array
 param privateZonesMappingDataFileType string
 param privateEndpointSubnetName string
 param privateEndpointSubnetAddressPrefix string
+@description('Comma-separated list of approved inbound IP addresses in /32 CIDR form allowed through the network security perimeter. Set via `azd env set AZURE_ALLOWED_INBOUND_IP_ADDRESSES "1.2.3.4/32,5.6.7.8/32"` so the values are not checked into source control.')
+param allowedInboundIpAddresses string = ''
+
+@description('Access mode for network security perimeter resource associations')
+@allowed(['Learning', 'Enforced'])
+param networkSecurityPerimeterAccessMode string = 'Enforced'
+
 @description('Schedule for stopping compute resources')
 param stopCompute object
 
@@ -43,9 +50,9 @@ param dnsResolverVm object = {
   diskSizeGB: 30
   publisher: 'Canonical'
   offer: '0001-com-ubuntu-server-jammy'
-  sku: '22_04-lts'
+  sku: '22_04-lts-arm64'
   version: 'latest'
-  vmSize: 'Standard_B1ms'
+  vmSize: 'Standard_B2pls_v2'
   privateIPAddress: '10.255.1.4'
 }
 
@@ -55,7 +62,7 @@ param githubActionsRunnerVm object = {
   offer: 'ubuntu-24_04-lts'
   sku: 'server'
   version: 'latest'
-  vmSize: 'Standard_D2ls_v5'
+  vmSize: 'Standard_D2als_v6'
   diskSizeGB: 1024
   privateIPAddress: '10.255.1.5'
   vmName: ''
@@ -81,6 +88,9 @@ var dnsResolverCloudInit = dnsResolverCloudInitTemplate
 
 @description('Id of the user or app to assign application roles')
 var abbrs = loadJsonContent('./abbreviations.json')
+var allowedInboundIpAddressList = empty(trim(allowedInboundIpAddresses))
+  ? []
+  : map(split(trim(allowedInboundIpAddresses), ','), ip => trim(ip))
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var privateZonesMappingData = (privateZonesMappingDataFileType == 'commercial')
   ? loadJsonContent('./commercial.private-zones.json')
@@ -229,6 +239,21 @@ module storageAccountDeployment './modules/storage-account.bicep' = {
     abbrs: abbrs
     location: location
     privateEndpointSubnetResourceId: virtualNetworkDeployment.outputs.privateEndpointSubnetResourceId
+  }
+}
+
+module networkSecurityPerimeterDeployment './modules/network-security-perimeter.bicep' = {
+  name: 'network-security-perimeter-deployment'
+  scope: resourceGroup
+  params: {
+    resourceToken: resourceToken
+    abbrs: abbrs
+    location: location
+    allowedInboundIpAddresses: allowedInboundIpAddressList
+    associationAccessMode: networkSecurityPerimeterAccessMode
+    associatedResourceIds: [
+      storageAccountDeployment.outputs.storageAccountId
+    ]
   }
 }
 

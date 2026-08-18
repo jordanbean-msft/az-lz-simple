@@ -3,6 +3,10 @@ param abbrs object
 param location string
 param privateEndpointSubnetResourceId string
 
+@description('Public network access mode. Use SecuredByPerimeter so the associated network security perimeter evaluates public access instead of blocking it outright.')
+@allowed(['Enabled', 'Disabled', 'SecuredByPerimeter'])
+param publicNetworkAccess string = 'SecuredByPerimeter'
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: '${abbrs.storageStorageAccounts}${location}${resourceToken}'
   location: location
@@ -11,7 +15,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   }
   kind: 'StorageV2'
   properties: {
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: publicNetworkAccess
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false

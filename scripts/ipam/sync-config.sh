@@ -295,7 +295,9 @@ for i in $(seq 0 $((PEERING_COUNT - 1))); do
   REMOTE_SPACE=$(echo "$VNET_INFO" | jq -r '.addressSpace // "unknown"')
 
   # Derive a spoke name from the VNet name
-  SPOKE_NAME=$(echo "$REMOTE_VNET" | sed -E 's/^vnet-//' | sed -E "s/-${REMOTE_LOCATION}$//" | sed -E 's/-[a-z0-9]{10,}$//')
+  # Only strip a generated suffix when it contains a digit; this avoids
+  # truncating legitimate words such as "automation".
+  SPOKE_NAME=$(echo "$REMOTE_VNET" | sed -E 's/^vnet-//' | sed -E "s/-${REMOTE_LOCATION}$//" | sed -E 's/-[a-z0-9]*[0-9][a-z0-9]*$//')
   if [[ -z "$SPOKE_NAME" || "$SPOKE_NAME" == "$REMOTE_VNET" ]]; then
     SPOKE_NAME="$REMOTE_VNET"
   fi

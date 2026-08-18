@@ -17,6 +17,7 @@ This landing zone has:
 - The VPN gateway advertises custom routes for `10.0.0.0/8` and `172.16.0.0/12` to clients.
 - Traffic between spokes is NOT force-tunneled through the hub — spoke-to-spoke requires direct mesh peering.
 - Private DNS zones are auto-created by Azure Policy when private endpoints are created, and linked to the hub VNet.
+- The Terraform-state storage account is associated with an enforced Network Security Perimeter. Its public access mode is `SecuredByPerimeter`, and approved public source IPs are configured through `AZURE_ALLOWED_INBOUND_IP_ADDRESSES`.
 
 ## Azure MCP Server
 

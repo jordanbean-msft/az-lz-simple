@@ -7,7 +7,9 @@
 
 ![architecture](./.img/architecture.drawio.png)
 
-A simple hub-spoke Azure landing zone deployed with Bicep and Azure Developer CLI. Includes a VPN gateway with Entra ID authentication, a DNS resolver VM running CoreDNS, a GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, scheduled compute start/stop via Logic Apps, and a Storage Account with a private endpoint.
+A simple hub-spoke Azure landing zone deployed with Bicep and Azure Developer CLI. Includes a VPN gateway with Entra ID authentication, a DNS resolver VM running CoreDNS, a GitHub Actions self-hosted runner VM, private DNS zones with Azure Policy auto-registration, scheduled compute start/stop via Logic Apps, and a Storage Account protected by a Network Security Perimeter with a private endpoint.
+
+See [docs/architecture.md](./docs/architecture.md) for the current logical architecture, NSP controls, and traffic paths.
 
 The blog post that reviews this architecture can be found [here](https://jordanbeandev.com/how-to-set-up-a-simple-hub-spoke-network-in-azure/).
 
@@ -33,7 +35,8 @@ The blog post that reviews this architecture can be found [here](https://jordanb
 | Private DNS Zones | Auto-registered via Azure Policy for private endpoint resolution |
 | Azure Policy | Custom policy definition for automatic private DNS zone creation and VNet linking |
 | Log Analytics Workspace | Central logging for diagnostics |
-| Storage Account | Blob storage with private endpoint (no public access) |
+| Storage Account | Blob storage with private endpoint and Network Security Perimeter protection |
+| Network Security Perimeter | Enforced inbound public access rules for approved `/32` IP addresses |
 | Logic Apps | Scheduled start/stop of compute resources (VMs, AKS, Container Apps, Function Apps) |
 | Managed Identity | User-assigned identity for policy remediation and compute management |
 | Role Assignments | Subscription-scoped roles for the managed identity |
@@ -50,6 +53,8 @@ Set these `azd` environment variables before running `azd up`:
 | `AZURE_GITHUB_REPO_URL` | Yes | GitHub repo URL for the Actions runner (e.g. `https://github.com/org/repo`) |
 | `AZURE_GITHUB_PAT` | Yes | Fine-grained GitHub PAT with runner registration permissions |
 | `AZURE_GITHUB_ACTIONS_ADMIN_PUBLIC_KEY` | Yes | SSH public key for the GitHub Actions runner VM |
+| `AZURE_ALLOWED_INBOUND_IP_ADDRESSES` | No | Comma-separated approved inbound `/32` IP addresses for the storage account's NSP |
+| `AZURE_NSP_ACCESS_MODE` | No | NSP association mode: `Enforced` by default; `Learning` is available for transition/testing |
 
 ## Deployment
 
@@ -152,6 +157,35 @@ azd env set AZURE_GITHUB_PAT "<your-fine-grained-pat>"
 azd env set AZURE_GITHUB_ACTIONS_ADMIN_PUBLIC_KEY "<ssh-public-key>"
 ```
 
+## Network Security Perimeter
+
+A [Network Security Perimeter](https://learn.microsoft.com/azure/private-link/network-security-perimeter-concepts) (`nsp-{resourceToken}`) is deployed into the central resource group. The storage account (used for Terraform state) is associated with the perimeter, and a `default` profile carries an inbound access rule listing the approved public IP addresses.
+
+The approved IP list is **not** checked into source control — it is read from the `azd` environment as a comma-separated list of `/32` CIDRs:
+
+```shell
+azd env set AZURE_ALLOWED_INBOUND_IP_ADDRESSES "203.0.113.10/32,198.51.100.25/32"
+
+# Optional transition mode. Enforced is the default and blocks non-approved public traffic.
+azd env set AZURE_NSP_ACCESS_MODE "Enforced"
+```
+
+The storage account uses `publicNetworkAccess: SecuredByPerimeter`, and its NSP association is `Enforced` by default. In Enforced mode, the NSP is the authoritative public-network control; the storage account firewall and trusted-service exceptions do not override it. Private endpoint traffic is not subject to NSP rules.
+
+If the IP variable is unset or empty, no inbound public access rule is created and public data-plane access is denied. Keep the list current when your workstation or automation egress IP changes.
+
+The NSP resource is deployed in the central resource group and currently associates the Terraform-state storage account. To inspect the live configuration:
+
+```shell
+az storage account show -g <central-resource-group> -n <storage-account-name> \
+  --query "{publicNetworkAccess:publicNetworkAccess,networkRuleSet:networkRuleSet}" -o json
+
+az rest --method get \
+  --url "https://management.azure.com/<nsp-resource-id>/resourceAssociations?api-version=2024-07-01"
+```
+
+See [docs/architecture.md](./docs/architecture.md) for the logical topology and traffic paths.
+
 ## IPAM — Spoke VNet Provisioning
 
 A VS Code task-driven tool for creating spoke VNets peered to the hub. Run tasks from the Command Palette (`Ctrl+Shift+P` → `Tasks: Run Task`):
@@ -200,5 +234,3 @@ This repo includes custom GitHub Copilot agents you can invoke in Copilot Chat:
 
 - **`@network-troubleshooter`** — Systematically diagnoses connectivity problems (VPN, DNS, peering, private endpoints) using the debug scripts, Azure CLI, and Azure MCP Server tools.
 - **`@ipam`** — Walks you through provisioning a new spoke VNet: discovers available address space, designs a subnet plan, runs a dry-run, provisions with peering and DNS, and verifies. Uses Azure MCP Server for read queries.
-
-
