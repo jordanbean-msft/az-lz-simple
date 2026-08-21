@@ -491,16 +491,22 @@
       "privateDnsZoneName": ["privatelink.azuredatabricks.net"]
     },
     {
+      "resource": "Azure Durable Task Scheduler",
+      "privateLinkResourceType": "Microsoft.DurableTask/schedulers",
+      "subresource": "scheduler",
+      "privateDnsZoneName": ["privatelink.durabletask.io"]
+    },
+    {
       "resource": "Azure Kubernetes Service",
       "privateLinkResourceType": "Microsoft.ContainerService/managedClusters",
       "subresource": "management",
-      "privateDnsZoneName": ["privatelink.eastus2.azmk8s.io"]
+      "privateDnsZoneName": ["privatelink.eastus2.azmk8s.io", "privatelink.swedencentral.azmk8s.io"]
     },
     {
       "resource": "Azure Container Apps",
       "privateLinkResourceType": "Microsoft.App/ManagedEnvironments",
       "subresource": "managedEnvironments",
-      "privateDnsZoneName": ["privatelink.eastus2.azurecontainerapps.io"]
+      "privateDnsZoneName": ["privatelink.eastus2.azurecontainerapps.io", "privatelink.swedencentral.azurecontainerapps.io"]
     }
   ]
 }
